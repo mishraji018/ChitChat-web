@@ -1,58 +1,40 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
-  senderId: { type: String, required: true },
-  receiverId: { type: String, required: true },
-  conversationId: { type: String, required: true },
-  type: {
-    type: String,
-    enum: ['text', 'image', 'pdf', 'voice', 'video', 'location'],
-    required: true
+  conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true },
+  senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  receiverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  type: { 
+    type: String, 
+    enum: ['text', 'image', 'video', 'audio', 'pdf', 'location'],
+    default: 'text'
   },
-  content: { type: String, required: true },
-  fileName: { type: String },
-  fileSize: { type: String },
-  duration: { type: String },
-  mediaData: {
-    publicId: String,
-    width: Number,
-    height: Number,
-    size: String,
-    thumbnail: String,
-    duration: String,
-    fileName: String,
-    fileType: String,
-    latitude: Number,
-    longitude: Number,
-    address: String
+  text: { type: String },
+  mediaUrl: { type: String },
+  mediaSize: { type: Number },
+  mediaDuration: { type: Number },
+  location: {
+    lat: { type: Number },
+    lng: { type: Number },
+    address: { type: String }
   },
-  linkPreview: {
-    url: String,
-    title: String,
-    description: String,
-    image: String,
-    siteName: String
-  },
-  timestamp: { type: Date, default: Date.now },
-  editedAt: { type: Date, default: null },
-  isEdited: { type: Boolean, default: false },
-  status: {
-    type: String,
+  status: { 
+    type: String, 
     enum: ['sent', 'delivered', 'read'],
     default: 'sent'
   },
-  isQueued: { type: Boolean, default: false },      // waiting for delivery
-  queuedAt: { type: Date, default: null },          // when it was queued
-  deliveredAt: { type: Date, default: null },       // when delivered
-  readAt: { type: Date, default: null },            // when read
-  deletedFor: [{ type: String }],
+  replyTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Message' },
   reactions: [{
-    userId: { type: String },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     emoji: { type: String }
   }],
-  replyTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null },
-  isDeletedForEveryone: { type: Boolean, default: false },
-  isStarred: [{ type: String }]
-});
+  isEdited: { type: Boolean, default: false },
+  editedAt: { type: Date },
+  isDeleted: { type: Boolean, default: false },
+  deletedFor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  isStarred: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  isForwarded: { type: Boolean, default: false }
+}, { timestamps: true });
 
-export const Message = mongoose.model('Message', messageSchema);
+const Message = mongoose.model('Message', messageSchema);
+export default Message;

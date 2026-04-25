@@ -1,24 +1,22 @@
 import { v2 as cloudinary } from 'cloudinary';
-import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Configuration
-cloudinary.config({ 
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
-    api_key: process.env.CLOUDINARY_API_KEY, 
-    api_secret: process.env.CLOUDINARY_API_SECRET 
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Use memory storage for Multer to allow buffer inspection with magic bytes
-const storage = multer.memoryStorage();
-export const upload = multer({ 
-  storage,
-  limits: {
-    // A generous limit that covers the max of all allowed video payloads (64MB)
-    fileSize: 64 * 1024 * 1024, 
-  }
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'chitchat',
+    allowed_formats: ['jpg', 'png', 'jpeg', 'gif', 'mp4', 'mp3', 'pdf'],
+    resource_type: 'auto',
+  },
 });
 
-export { cloudinary };
+export { cloudinary, storage };
