@@ -112,24 +112,43 @@ const ChatPanel = ({
   const fetchMessages = async (before?: string) => {
     if (!chat || !currentUser) return;
     if (isLoadingMore) return;
+    
+    // Skip fetching for mock IDs if any still remain
+    if (typeof chat.id === 'string' && (chat.id.startsWith('c1') || chat.id.startsWith('c2'))) {
+      setMessages([]);
+      setHasMore(false);
+      return;
+    }
+
     setIsLoadingMore(before ? true : false);
 
     try {
-      const res = await apiFetch(`/api/messages/${chat.id}?userId=${currentUser.id}${before ? `&before=${before}` : ''}&limit=30`);
+      // Use conversationId if available, otherwise try to find/create one using receiverId
+      const targetId = chat.id;
+      const res = await apiFetch(`/api/messages/${targetId}?userId=${currentUser.id}${before ? `&before=${before}` : ''}&limit=30`);
+      
+      if (res && res.status === 404 && !targetId.includes('-')) {
+        // If 404 and ID is not a UUID, it might be a userId. 
+        // This is a hint to the backend to find conversation by participants.
+        // We'll handle this by letting the backend getMessages handle it or redirect.
+      }
+
       if (!res) return;
       const data = await res.json();
       
-      if (data.length < 30) setHasMore(false);
+      const fetchedMessages = Array.isArray(data) ? data : (data.messages || data.data || []);
+      
+      if (fetchedMessages.length < 30) setHasMore(false);
       
       if (before) {
         const container = containerRef.current;
         const previousHeight = container?.scrollHeight || 0;
-        setMessages(prev => [...data, ...prev]);
+        setMessages(prev => [...fetchedMessages, ...prev]);
         setTimeout(() => {
           if (container) container.scrollTop = container.scrollHeight - previousHeight;
         }, 0);
       } else {
-        setMessages(data);
+        setMessages(fetchedMessages);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'auto' }), 100);
       }
     } catch (err) {
@@ -159,9 +178,9 @@ const ChatPanel = ({
 
     const handleReceiveMessage = (message: any) => {
       if (message.senderId === chat.user.id) {
-        const normalizedMsg = { ...message, id: message._id };
+        const normalizedMsg = { ...message, id: message._id || message.id };
         setMessages(prev => [...prev, normalizedMsg]);
-        markAsRead(normalizedMsg.id, normalizedMsg.senderId, normalizedMsg.conversationId);
+        markAsRead(normalizedMsg.conversationId, currentUser.id);
       }
     };
 

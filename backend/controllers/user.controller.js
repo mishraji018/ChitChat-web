@@ -1,8 +1,14 @@
-import User from '../models/User.js';
+import { supabase } from '../config/supabase.js';
 
 export const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-passkey');
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, name, mobile, email, avatar, bio, is_online, last_seen')
+      .eq('id', req.user.id)
+      .single();
+
+    if (error) throw error;
     res.status(200).json({ success: true, data: user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -13,28 +19,23 @@ export const updateProfile = async (req, res) => {
   const { name, bio, avatar } = req.body;
 
   try {
-    const user = await User.findById(req.user.id);
+    const { data: user, error } = await supabase
+      .from('users')
+      .update({
+        name: name || undefined,
+        bio: bio || undefined,
+        avatar: avatar || undefined,
+      })
+      .eq('id', req.user.id)
+      .select('id, name, mobile, email, avatar, bio')
+      .single();
 
-    if (user) {
-      user.name = name || user.name;
-      user.bio = bio || user.bio;
-      user.avatar = avatar || user.avatar;
-      
-      const updatedUser = await user.save();
-      res.status(200).json({
-        success: true,
-        data: {
-          id: updatedUser._id,
-          name: updatedUser.name,
-          mobile: updatedUser.mobile,
-          email: updatedUser.email,
-          avatar: updatedUser.avatar,
-          bio: updatedUser.bio,
-        }
-      });
-    } else {
-      res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (error) throw error;
+
+    res.status(200).json({
+      success: true,
+      data: user
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -44,18 +45,13 @@ export const searchUsers = async (req, res) => {
   const query = req.query.q;
 
   try {
-    const users = await User.find({
-      $and: [
-        { 
-          $or: [
-            { name: { $regex: query, $options: 'i' } },
-            { mobile: { $regex: query, $options: 'i' } }
-          ]
-        },
-        { _id: { $ne: req.user.id } }
-      ]
-    }).select('name mobile avatar bio isOnline lastSeen');
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, name, mobile, avatar, bio, is_online, last_seen')
+      .neq('id', req.user.id)
+      .or(`name.ilike.%${query}%,mobile.ilike.%${query}%`);
 
+    if (error) throw error;
     res.status(200).json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -64,8 +60,12 @@ export const searchUsers = async (req, res) => {
 
 export const getContacts = async (req, res) => {
   try {
-    const users = await User.find({ _id: { $ne: req.user.id } })
-      .select('name mobile avatar bio isOnline lastSeen');
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, name, mobile, avatar, bio, is_online, last_seen')
+      .neq('id', req.user.id);
+
+    if (error) throw error;
     res.status(200).json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -76,7 +76,12 @@ export const updateFCMToken = async (req, res) => {
   const { fcmToken } = req.body;
 
   try {
-    await User.findByIdAndUpdate(req.user.id, { fcmToken });
+    const { error } = await supabase
+      .from('users')
+      .update({ fcm_token: fcmToken })
+      .eq('id', req.user.id);
+
+    if (error) throw error;
     res.status(200).json({ success: true, message: 'FCM token updated' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

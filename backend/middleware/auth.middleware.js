@@ -1,5 +1,4 @@
-import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { supabase } from '../config/supabase.js';
 
 export const protect = async (req, res, next) => {
   let token;
@@ -7,15 +6,30 @@ export const protect = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-passkey');
-      if (!req.user) {
-        return res.status(401).json({ success: false, message: 'User not found' });
+      
+      // Verify token with Supabase
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+
+      if (authError || !authUser) {
+        return res.status(401).json({ success: false, message: 'Not authorized, token failed' });
       }
+      
+      // Fetch the full user from our database table
+      const { data: user, error: dbError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', authUser.email)
+        .single();
+
+      if (dbError || !user) {
+        return res.status(401).json({ success: false, message: 'User profile not found' });
+      }
+
+      req.user = user;
       next();
     } catch (error) {
-      console.error(error);
-      res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+      console.error('Auth Middleware Error:', error);
+      res.status(401).json({ success: false, message: 'Not authorized' });
     }
   }
 

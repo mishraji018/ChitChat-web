@@ -1,6 +1,4 @@
-import Conversation from '../models/Conversation.js';
-import Message from '../models/Message.js';
-import User from '../models/User.js';
+import { supabase } from '../config/supabase.js';
 
 const socketHandler = (io) => {
   const onlineUsers = new Map(); // userId -> socketId
@@ -9,16 +7,23 @@ const socketHandler = (io) => {
     console.log('New socket connection:', socket.id);
 
     // Authenticate and join user to their own room
-    socket.on('authenticate', async (userId) => {
-      socket.join(userId);
+    socket.on('authenticate', async (data) => {
+      // Handle both string (old) and object (new) formats
+      const userId = typeof data === 'string' ? data : data.userId;
+      if (!userId) return;
+
+      socket.join(`user_${userId}`);
       onlineUsers.set(userId, socket.id);
       
-      // Update online status in DB
-      await User.findByIdAndUpdate(userId, { isOnline: true });
+      // Update online status in DB - use snake_case as per Supabase schema
+      await supabase
+        .from('users')
+        .update({ is_online: true, last_seen: new Date().toISOString() })
+        .eq('id', userId);
       
       // Broadcast to others
       socket.broadcast.emit('user_online', { userId });
-      console.log(`User ${userId} authenticated and joined room`);
+      console.log(`User ${userId} authenticated and joined room user_${userId}`);
     });
 
     // Join conversation room
@@ -45,16 +50,22 @@ const socketHandler = (io) => {
 
     // Message delivered
     socket.on('message_delivered', async ({ messageId, senderId }) => {
-      await Message.findByIdAndUpdate(messageId, { status: 'delivered' });
-      io.to(senderId).emit('message_status', { messageId, status: 'delivered' });
+      await supabase
+        .from('messages')
+        .update({ status: 'delivered' })
+        .eq('id', messageId);
+      io.to(`user_${senderId}`).emit('message_status', { messageId, status: 'delivered' });
     });
 
     // Message read
     socket.on('message_read', async ({ conversationId, userId }) => {
-      await Message.updateMany(
-        { conversationId, receiverId: userId, status: { $ne: 'read' } },
-        { status: 'read' }
-      );
+      await supabase
+        .from('messages')
+        .update({ status: 'read' })
+        .eq('conversation_id', conversationId)
+        .eq('receiver_id', userId)
+        .neq('status', 'read');
+
       // Notify sender
       socket.to(conversationId).emit('message_read', { conversationId });
     });
@@ -71,15 +82,17 @@ const socketHandler = (io) => {
 
       if (disconnectedUserId) {
         onlineUsers.delete(disconnectedUserId);
-        const lastSeen = new Date();
-        await User.findByIdAndUpdate(disconnectedUserId, { isOnline: false, lastSeen });
-        io.emit('user_offline', { userId: disconnectedUserId, lastSeen });
+        const lastSeen = new Date().toISOString();
+        await supabase
+          .from('users')
+          .update({ is_online: false, last_seen: lastSeen })
+          .eq('id', disconnectedUserId);
+        
+        io.emit('user_offline', { userId: disconnectedUserId, last_seen: lastSeen });
         console.log(`User ${disconnectedUserId} disconnected`);
       }
     });
 
-    // --- Extended events for full integration ---
-    
     // Broadcast message edit
     socket.on('message_edited', (message) => {
       socket.to(message.conversationId).emit('message_edited', message);

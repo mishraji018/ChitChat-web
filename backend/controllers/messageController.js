@@ -1,5 +1,4 @@
-import { Message } from '../models/Message.js';
-import { Conversation } from '../models/Conversation.js';
+import { supabase } from '../config/supabase.js';
 import { encrypt, decrypt } from '../utils/encryption.js';
 
 export const getConversationId = (id1, id2) => {
@@ -11,33 +10,43 @@ export const sendMessage = async (req, res) => {
     const { senderId, receiverId, type, content, fileName, fileSize, duration, replyTo } = req.body;
     const conversationId = getConversationId(senderId, receiverId);
 
-    const newMessage = new Message({
-      senderId,
-      receiverId,
-      conversationId,
-      type,
-      content: encrypt(content),
-      fileName,
-      fileSize,
-      duration,
-      replyTo
-    });
+    const { data: newMessage, error: msgError } = await supabase
+      .from('messages')
+      .insert({
+        senderId,
+        receiverId,
+        conversationId,
+        type,
+        text: encrypt(content),
+        mediaUrl: fileName, // Assuming fileName maps to mediaUrl in this context
+        mediaSize: fileSize,
+        mediaDuration: duration,
+        replyTo
+      })
+      .select()
+      .single();
 
-    await newMessage.save();
+    if (msgError) throw msgError;
 
     // Update or create conversation
-    await Conversation.findOneAndUpdate(
-      { conversationId },
-      {
-        $setOnInsert: { participants: [senderId, receiverId] },
-        $set: {
-          lastMessage: type === 'text' ? content : type,
-          lastMessageTime: newMessage.timestamp,
-          lastMessageType: type
-        }
-      },
-      { upsert: true, new: true }
-    );
+    let { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('participant_ids', `{${senderId},${receiverId}}`)
+      .single();
+
+    if (convError || !conversation) {
+      await supabase.from('conversations').insert({
+        participant_ids: [senderId, receiverId],
+        lastMessageId: newMessage.id,
+        lastMessageTime: new Date().toISOString()
+      });
+    } else {
+      await supabase.from('conversations').update({
+        lastMessageId: newMessage.id,
+        lastMessageTime: new Date().toISOString()
+      }).eq('id', conversation.id);
+    }
 
     res.status(201).json(newMessage);
   } catch (error) {
@@ -48,32 +57,29 @@ export const sendMessage = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { userId, before, limit = 20 } = req.query; // Pagination: before timestamp, limit count
+    const { userId, before, limit = 20 } = req.query;
 
     if (!userId) return res.status(400).json({ error: 'userId query parameter is required' });
 
-    const query = {
-      conversationId,
-      deletedFor: { $ne: userId }
-    };
+    let queryBuilder = supabase
+      .from('messages')
+      .select('*')
+      .eq('conversationId', conversationId)
+      .not('deletedFor', 'cs', `{${userId}}`)
+      .order('createdAt', { ascending: false })
+      .limit(parseInt(limit));
 
-    // If 'before' is provided, fetch messages older than that
     if (before) {
-      query.timestamp = { $lt: new Date(before) };
+      queryBuilder = queryBuilder.lt('createdAt', before);
     }
 
-    const messages = await Message.find(query)
-      .sort({ timestamp: -1 }) // Sort by newest first to get the most recent chunk
-      .limit(parseInt(limit))
-      .lean();
+    const { data: messages, error } = await queryBuilder;
+    if (error) throw error;
 
-    // Reverse back to chronological order
-    const orderedMessages = messages.reverse();
-
-    const decryptedMessages = orderedMessages.map(msg => ({
+    const decryptedMessages = messages.map(msg => ({
       ...msg,
-      content: decrypt(msg.content)
-    }));
+      content: decrypt(msg.text)
+    })).reverse();
 
     res.status(200).json(decryptedMessages);
   } catch (error) {
@@ -86,13 +92,28 @@ export const softDeleteMessage = async (req, res) => {
     const { messageId } = req.params;
     const { userId } = req.body;
 
-    const message = await Message.findByIdAndUpdate(
-      messageId,
-      { $addToSet: { deletedFor: userId } },
-      { new: true }
-    );
+    const { data: message, error: fetchError } = await supabase
+      .from('messages')
+      .select('deletedFor')
+      .eq('id', messageId)
+      .single();
 
-    res.status(200).json(message);
+    if (fetchError) throw fetchError;
+
+    const deletedFor = [...(message.deletedFor || [])];
+    if (!deletedFor.includes(userId)) {
+      deletedFor.push(userId);
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('messages')
+      .update({ deletedFor })
+      .eq('id', messageId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+    res.status(200).json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -102,23 +123,35 @@ export const hardDeleteMessage = async (req, res) => {
   try {
     const { messageId } = req.params;
 
-    const message = await Message.findById(messageId);
-    if (!message) return res.status(404).json({ error: 'Message not found' });
+    const { data: message, error: fetchError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('id', messageId)
+      .single();
 
-    const timeDiff = (Date.now() - new Date(message.timestamp).getTime()) / 1000;
+    if (fetchError || !message) return res.status(404).json({ error: 'Message not found' });
+
+    const timeDiff = (Date.now() - new Date(message.createdAt).getTime()) / 1000;
     if (timeDiff > 60) {
       return res.status(403).json({ error: 'Can only delete for everyone within 60 seconds' });
     }
 
-    message.content = 'This message was deleted';
-    message.type = 'text';
-    message.fileName = null;
-    message.fileSize = null;
-    message.duration = null;
-    
-    await message.save();
+    const { data: updated, error: updateError } = await supabase
+      .from('messages')
+      .update({
+        text: encrypt('This message was deleted'),
+        type: 'text',
+        mediaUrl: null,
+        mediaSize: null,
+        mediaDuration: null,
+        isDeleted: true
+      })
+      .eq('id', messageId)
+      .select()
+      .single();
 
-    res.status(200).json(message);
+    if (updateError) throw updateError;
+    res.status(200).json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -129,17 +162,19 @@ export const editMessage = async (req, res) => {
     const { messageId } = req.params;
     const { content } = req.body;
 
-    const message = await Message.findByIdAndUpdate(
-      messageId,
-      {
-        content: encrypt(content),
+    const { data: updated, error } = await supabase
+      .from('messages')
+      .update({
+        text: encrypt(content),
         isEdited: true,
-        editedAt: Date.now()
-      },
-      { new: true }
-    );
+        editedAt: new Date().toISOString()
+      })
+      .eq('id', messageId)
+      .select()
+      .single();
 
-    res.status(200).json(message);
+    if (error) throw error;
+    res.status(200).json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -150,21 +185,28 @@ export const reactToMessage = async (req, res) => {
     const { messageId } = req.params;
     const { userId, emoji } = req.body;
 
-    // Remove existing reaction by user if any, then add new one
-    await Message.updateOne(
-      { _id: messageId },
-      { $pull: { reactions: { userId } } }
-    );
+    const { data: message, error: fetchError } = await supabase
+      .from('messages')
+      .select('reactions')
+      .eq('id', messageId)
+      .single();
 
+    if (fetchError) throw fetchError;
+
+    let reactions = [...(message.reactions || [])].filter(r => r.userId !== userId);
     if (emoji) {
-      await Message.updateOne(
-        { _id: messageId },
-        { $push: { reactions: { userId, emoji } } }
-      );
+      reactions.push({ userId, emoji });
     }
 
-    const updatedMessage = await Message.findById(messageId);
-    res.status(200).json(updatedMessage);
+    const { data: updated, error: updateError } = await supabase
+      .from('messages')
+      .update({ reactions })
+      .eq('id', messageId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+    res.status(200).json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -175,15 +217,31 @@ export const toggleStarMessage = async (req, res) => {
     const { messageId } = req.params;
     const { userId } = req.body;
 
-    const message = await Message.findById(messageId);
-    const hasStarred = message.isStarred.includes(userId);
+    const { data: message, error: fetchError } = await supabase
+      .from('messages')
+      .select('isStarred')
+      .eq('id', messageId)
+      .single();
 
-    const update = hasStarred 
-      ? { $pull: { isStarred: userId } }
-      : { $addToSet: { isStarred: userId } };
+    if (fetchError) throw fetchError;
 
-    const updatedMessage = await Message.findByIdAndUpdate(messageId, update, { new: true });
-    res.status(200).json(updatedMessage);
+    let isStarred = [...(message.isStarred || [])];
+    const index = isStarred.indexOf(userId);
+    if (index > -1) {
+      isStarred.splice(index, 1);
+    } else {
+      isStarred.push(userId);
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from('messages')
+      .update({ isStarred })
+      .eq('id', messageId)
+      .select()
+      .single();
+
+    if (updateError) throw updateError;
+    res.status(200).json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -194,13 +252,15 @@ export const updateMessageStatus = async (req, res) => {
     const { messageId } = req.params;
     const { status } = req.body;
 
-    const message = await Message.findByIdAndUpdate(
-      messageId,
-      { status },
-      { new: true }
-    );
+    const { data: updated, error } = await supabase
+      .from('messages')
+      .update({ status })
+      .eq('id', messageId)
+      .select()
+      .single();
 
-    res.status(200).json(message);
+    if (error) throw error;
+    res.status(200).json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -209,21 +269,22 @@ export const updateMessageStatus = async (req, res) => {
 export const getPendingCount = async (req, res) => {
   try {
     const { userId } = req.params;
-    const pendingCount = await Message.countDocuments({
-      receiverId: userId,
-      isQueued: true,
-      status: 'sent'
-    });
+    const { count, error } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('receiverId', userId)
+      .eq('status', 'sent');
+
+    if (error) throw error;
 
     res.json({ 
       success: true, 
-      pendingCount,
-      message: pendingCount > 0 
-        ? `You have ${pendingCount} undelivered message${pendingCount > 1 ? 's' : ''}` 
+      pendingCount: count,
+      message: count > 0 
+        ? `You have ${count} undelivered message${count > 1 ? 's' : ''}` 
         : 'No pending messages'
     });
   } catch (err) {
-    console.error('Pending count error:', err);
     res.status(500).json({ error: 'Failed to check pending messages', details: err.message });
   }
 };

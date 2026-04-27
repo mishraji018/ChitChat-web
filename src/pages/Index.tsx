@@ -19,6 +19,7 @@ import { useLocalStorage } from '@/hooks/use-local-storage';
 import { wallpapers } from '@/data/wallpapers';
 import { useLanguage } from '@/hooks/use-language';
 import { User } from '@/types/chat';
+import { apiFetch } from '../utils/tokenManager';
 
 interface IndexProps {
   currentUser: User;
@@ -31,9 +32,54 @@ interface IndexProps {
 const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexProps) => {
   const [chats, setChats] = useState(() => {
     const saved = localStorage.getItem('blinkchat_conversations');
-    return saved ? JSON.parse(saved) : mockChats;
+    // Initialize with empty array if no saved data, to avoid mock data
+    return saved ? JSON.parse(saved) : [];
   });
   
+  useEffect(() => {
+    const fetchContacts = async () => {
+      try {
+        const res = await apiFetch('/api/user/contacts');
+        if (!res) return;
+        const data = await res.json();
+        
+        if (data.success && Array.isArray(data.data)) {
+          // Map real users to chat format if they don't exist in chats list
+          const realContacts = data.data.map((user: any) => ({
+            id: user.id, // Use real user ID as chat ID for 1-on-1
+            user: {
+              id: user.id,
+              username: user.name.toLowerCase(),
+              displayName: user.name,
+              avatar: user.avatar,
+              avatarColor: '#00d4a0', // Default color
+              isOnline: user.is_online,
+              lastSeen: user.last_seen
+            },
+            messages: [],
+            unreadCount: 0,
+            isPinned: false,
+            isMuted: false,
+            isArchived: false,
+          }));
+
+          setChats((prev: any) => {
+            // Keep existing chats but add new real contacts
+            const existingIds = new Set(prev.map((c: any) => c.user.id));
+            const newOnes = realContacts.filter((rc: any) => !existingIds.has(rc.user.id));
+            return [...prev, ...newOnes];
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch contacts:', err);
+      }
+    };
+
+    if (currentUser) {
+      fetchContacts();
+    }
+  }, [currentUser]);
+
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);

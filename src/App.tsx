@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Toaster as Sonner, toast } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,117 +6,89 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import SplashScreen from "@/components/SplashScreen";
 import LoginScreen from "@/components/LoginScreen";
-import { useLocalStorage } from "@/hooks/use-local-storage";
+import UsernameScreen from "@/components/UsernameScreen";
+import { supabase } from "@/lib/supabase";
+import { syncGoogleAuth, completeGoogleSignup } from "@/services/authService";
 import { useLanguage } from "@/hooks/use-language";
-import { currentUser as defaultUser } from "@/data/mockData";
-import { getToken, isTokenExpired, refreshToken, apiFetch } from "@/utils/tokenManager";
-
-import AppLock from "./components/AppLock";
 import { useInternet } from '@/hooks/use-internet';
 import NoInternet from '@/components/NoInternet';
-import { Wifi } from 'lucide-react';
 
 const queryClient = new QueryClient();
 
 const App = () => {
   const { isOnline, retry } = useInternet();
-  const [prevOnline, setPrevOnline] = useState(true);
-
-  // Show toast when connection changes
-  useEffect(() => {
-    if (!isOnline && prevOnline) {
-      setPrevOnline(false);
-    } else if (isOnline && !prevOnline) {
-      setPrevOnline(true);
-      toast.success('Back online! 🌐', {
-        icon: <Wifi size={16} />,
-        duration: 3000
-      });
-    }
-  }, [isOnline, prevOnline]);
-
   const [showSplash, setShowSplash] = useState(true);
   const { t, language, changeLanguage } = useLanguage();
-  const [currentUser, setCurrentUser] = useLocalStorage("blinkchat_user", defaultUser);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const saved = localStorage.getItem("blinkchat_user");
-    if (!saved) return false;
-    try {
-      return JSON.parse(saved).isLoggedIn || false;
-    } catch { return false; }
-  });
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [appPin] = useLocalStorage('blinkchat_app_pin', '');
-  const [isAppUnlocked, setIsAppUnlocked] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showUsernameScreen, setShowUsernameScreen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [tempAuthUser, setTempAuthUser] = useState<any>(null);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const token = getToken();
-      if (!token) {
-        setIsLoggedIn(false);
-        return;
-      }
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        const { user } = session;
+        localStorage.setItem("blinkchat_token", session.access_token);
+        
+        // Check if user exists in public.users table
+        const { data: dbUser, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', user.email)
+          .single();
 
-      if (isTokenExpired(token)) {
-        setIsRefreshing(true);
-        const newToken = await refreshToken();
-        setIsRefreshing(false);
-        if (!newToken) {
-          setIsLoggedIn(false);
-          toast.error("Session expired. Please login again.");
-          return;
+        if (error || !dbUser) {
+          // New User
+          setTempAuthUser(user);
+          setShowUsernameScreen(true);
+        } else {
+          // Existing User
+          setCurrentUser(dbUser);
+          setIsLoggedIn(true);
+          setShowUsernameScreen(false);
         }
+      } else {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+        localStorage.removeItem("blinkchat_token");
+        localStorage.removeItem("blinkchat_user");
       }
-      setIsLoggedIn(true);
-    };
+    });
 
-    checkSession();
+    return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (!currentUser?.id || !isLoggedIn) return;
+  const handleUsernameComplete = async (username: string) => {
+    setLoading(true);
+    try {
+      const res = await completeGoogleSignup({
+        userId: tempAuthUser.id,
+        email: tempAuthUser.email,
+        username,
+        avatar_url: tempAuthUser.user_metadata.avatar_url
+      });
 
-    const checkPending = async () => {
-      try {
-        const res = await apiFetch(`/api/messages/pending/${currentUser.id}`);
-        if (!res) return;
-        
-        const data = await res.json();
-        if (data.pendingCount > 0) {
-          toast.info(`📦 ${data.message}`, { duration: 5000 });
-        }
-      } catch (err) {
-        console.error('Pending check error:', err);
-      }
-    };
+      if (!res.success) throw new Error(res.message);
 
-    checkPending();
-  }, [currentUser, isLoggedIn]);
-
-
-
-  const handleLogin = (user: any) => {
-    setCurrentUser(user);
-    setIsLoggedIn(true);
+      setCurrentUser(res.data.user);
+      setIsLoggedIn(true);
+      setShowUsernameScreen(false);
+      toast.success(`Welcome to ChitChat, ${username}!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to set username');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setCurrentUser(null);
-    setIsAppUnlocked(false);
-    localStorage.removeItem("blinkchat_token"); // Replaced clearToken() with existing logic
-    localStorage.removeItem("blinkchat_user");
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     window.location.reload();
   };
 
-  if (appPin && !isAppUnlocked && isLoggedIn) {
-    return <AppLock correctPin={appPin} onUnlock={() => setIsAppUnlocked(true)} />;
-  }
-
-  // Show no internet screen
-  if (!isOnline) {
-    return <NoInternet onRetry={retry} />;
-  }
+  if (!isOnline) return <NoInternet onRetry={retry} />;
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -127,8 +98,10 @@ const App = () => {
         <div className="h-screen w-screen overflow-hidden">
           {showSplash ? (
             <SplashScreen onComplete={() => setShowSplash(false)} />
+          ) : showUsernameScreen ? (
+            <UsernameScreen onComplete={handleUsernameComplete} loading={loading} />
           ) : !isLoggedIn ? (
-            <LoginScreen onLogin={handleLogin} t={t} />
+            <LoginScreen onLogin={() => {}} />
           ) : (
             <Index 
               currentUser={currentUser} 
