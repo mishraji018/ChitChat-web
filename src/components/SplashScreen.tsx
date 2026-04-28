@@ -38,9 +38,9 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.5 }}
-        className="text-4xl font-display font-bold text-foreground mb-2"
+        className="text-4xl font-display font-black text-foreground mb-2 tracking-tight"
       >
-        BlinkChat
+        Blink
       </motion.h1>
 
       {/* Tagline */}
@@ -48,9 +48,9 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.6, duration: 0.5 }}
-        className="text-xs tracking-[0.3em] uppercase text-muted-foreground mb-10"
+        className="text-[10px] tracking-[0.4em] uppercase text-muted-foreground font-bold mb-10"
       >
-        Encrypted. Fast. Personal.
+        Fast • Modern • Unique
       </motion.p>
 
       {/* Loading dots */}

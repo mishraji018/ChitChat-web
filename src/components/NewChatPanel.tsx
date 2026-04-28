@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, ArrowLeft, X, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import UserAvatar from './Avatar';
 import { User } from '@/types/chat';
 import { translations } from '@/i18n/translations';
+import { supabase } from '@/config/supabase';
 
 interface NewChatPanelProps {
   onClose: () => void;
@@ -11,23 +12,53 @@ interface NewChatPanelProps {
   t?: any;
 }
 
-// Mock registered users - in real app, fetch from /api/users/registered
-const registeredUsers: User[] = [
-  { id: 'u1', username: 'aarav', displayName: 'Aarav Singh', avatarColor: '#f472b6', isOnline: true, status: 'Building BlinkChat ⚡' },
-  { id: 'u2', username: 'priya', displayName: 'Priya Sharma', avatarColor: '#818cf8', isOnline: false, lastSeen: '2:30 PM', status: 'At the gym 💪' },
-  { id: 'u3', username: 'rohan', displayName: 'Rohan Verma', avatarColor: '#34d399', isOnline: true, status: 'Available' },
-  { id: 'u4', username: 'neha', displayName: 'Neha Gupta', avatarColor: '#fb923c', isOnline: false, lastSeen: 'Yesterday', status: 'Busy' },
-  { id: 'u5', username: 'arjun', displayName: 'Arjun Mehta', avatarColor: '#60a5fa', isOnline: true, status: 'Working remotely' },
-];
-
 const NewChatPanel = ({ onClose, onStartChat, t }: NewChatPanelProps) => {
   const safeT = t || translations['English'];
   const [searchQuery, setSearchQuery] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredUsers = registeredUsers.filter(user => 
-    user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoading(true);
+      try {
+        let query = supabase.from('users').select('*');
+        
+        if (searchQuery) {
+          query = query.or(`username.ilike.%${searchQuery}%,displayName.ilike.%${searchQuery}%`);
+        }
+
+        const { data, error } = await query.limit(20);
+        
+        if (error) throw error;
+
+        if (data) {
+          setUsers(data.map((u: any) => ({
+            id: u.id,
+            username: u.username || u.name?.toLowerCase().replace(' ', '_'),
+            displayName: u.displayName || u.name,
+            avatar: u.avatar_url || u.avatar,
+            avatarColor: '#ff4500',
+            isOnline: u.is_online,
+            lastSeen: u.last_seen ? new Date(u.last_seen).toLocaleTimeString() : '',
+            status: u.bio || 'Available'
+          })));
+        }
+      } catch (err) {
+        console.error('Error fetching users from Supabase:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      fetchUsers();
+    }, searchQuery ? 300 : 0);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const filteredUsers = users;
 
   return (
     <motion.div

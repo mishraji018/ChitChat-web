@@ -22,7 +22,7 @@ const NoInternet = ({ onRetry }: { onRetry: () => void }) => (
     <div className="text-center space-y-2 px-8">
       <h2 className="text-2xl font-bold text-foreground">No Internet Connection</h2>
       <p className="text-muted-foreground text-sm max-w-xs">
-        BlinkChat requires an active internet connection to send and receive messages.
+        Blink requires an active internet connection to send and receive messages.
       </p>
     </div>
 
@@ -35,7 +35,7 @@ const NoInternet = ({ onRetry }: { onRetry: () => void }) => (
     {/* Retry button */}
     <button
       onClick={onRetry}
-      className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-fuchsia-500 text-white font-bold rounded-xl hover:opacity-90 transition-opacity active:scale-95"
+      className="flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity active:scale-95"
     >
       <RefreshCw size={18} />
       Try Again
@@ -43,10 +43,10 @@ const NoInternet = ({ onRetry }: { onRetry: () => void }) => (
 
     {/* App branding */}
     <div className="absolute bottom-8 flex items-center gap-2 opacity-30">
-      <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-pink-500 to-fuchsia-500 flex items-center justify-center">
+      <div className="w-6 h-6 rounded-lg bg-primary flex items-center justify-center">
         <span className="text-xs text-white font-bold">B</span>
       </div>
-      <span className="text-sm font-bold">BlinkChat</span>
+      <span className="text-sm font-bold uppercase tracking-widest">Blink</span>
     </div>
   </div>
 );

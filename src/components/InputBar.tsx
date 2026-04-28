@@ -129,73 +129,37 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
     { icon: MapPin, label: 'Location', color: 'text-destructive' },
   ];
 
+  const suggestions = [
+    { label: "😂 Funny", value: "Haha, that's so funny!" },
+    { label: "❤️ Sweet", value: "That's so sweet of you! ❤️" },
+    { label: "😎 Cool", value: "Sounds cool, let's do it! 😎" }
+  ];
+
   return (
-    <div className="relative border-t border-border bg-card p-3">
+    <div className="relative bg-[#0f0f0f] border-t border-white/5 p-4">
+      {/* AI Suggestions Bar */}
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none">
+        {suggestions.map((s, i) => (
+          <button
+            key={i}
+            onClick={() => setText(s.value)}
+            className="whitespace-nowrap px-3 py-1 rounded-full bg-[#1a1a1a] border border-white/5 text-[12px] text-zinc-400 hover:text-purple-400 hover:border-purple-500/30 hover:bg-purple-500/5 transition-all duration-300"
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       <AnimatePresence>
         {!isRecipientOnline && !disabled && (
           <motion.div 
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-primary/5 text-[11px] text-muted-foreground py-1 px-3 mb-2 rounded-lg flex items-center gap-1.5"
+            className="bg-purple-500/10 text-[11px] text-purple-300 py-1.5 px-4 mb-3 rounded-full flex items-center gap-2 font-medium border border-purple-500/20"
           >
-            <span className="text-primary">🕙</span>
+            <span className="text-purple-400">🕙</span>
             <span>Recipient is offline. Messages will be delivered when they connect.</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {/* Emoji Picker */}
-      <AnimatePresence>
-        {showEmoji && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-full left-0 mb-2 z-30"
-          >
-            <EmojiPicker
-              theme={currentTheme === 'light' ? Theme.LIGHT : Theme.DARK}
-              onEmojiClick={(e) => setText(t => t + e.emoji)}
-              width={320}
-              height={360}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Attach dropdown */}
-      <AnimatePresence>
-        {showAttach && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute bottom-full left-12 mb-2 z-30 bg-popover border border-border rounded-xl p-2 shadow-xl"
-          >
-            {attachOptions.map(({ icon: Icon, label, color }) => (
-              <button
-                key={label}
-                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors"
-                onClick={() => {
-                  setShowAttach(false);
-                  if (label === 'Location') {
-                    onSend('123 Main St, New York, NY', 'location', {
-                      name: 'Central Park',
-                      address: '123 Main St, New York, NY',
-                      latitude: 40.785091,
-                      longitude: -73.968285
-                    });
-                  } else {
-                    const type = label === 'Photo/Video' ? 'image' : 'document';
-                    setActiveUploadType(type);
-                    fileInputRef.current?.click();
-                  }
-                }}
-              >
-                <Icon size={18} className={color} />
-                <span className="text-sm text-foreground">{label}</span>
-              </button>
-            ))}
           </motion.div>
         )}
       </AnimatePresence>
@@ -208,95 +172,91 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
         accept={activeUploadType === 'image' ? "image/*,video/*" : ".pdf,.doc,.docx,.xls,.xlsx,.txt"}
       />
 
-      {isUploading && (
-        <div className="px-4 py-2 bg-card border-t border-border mb-2 rounded-lg">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
-              <motion.div
-                className="bg-primary h-1.5 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${uploadProgress || 50}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground">{uploadProgress || '...'}%</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">Uploading...</p>
-        </div>
-      )}
-
       {isRecording ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3">
-          <button onClick={() => stopRecording(false)} className="text-muted-foreground hover:text-foreground">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 h-11">
+          <button onClick={() => stopRecording(false)} className="text-zinc-500 hover:text-zinc-300">
             <X size={20} />
           </button>
-          <div className="flex items-center gap-2 flex-1">
-            <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-            <span className="text-sm text-destructive font-medium">{formatTime(recordTime)}</span>
-            <div className="flex items-center gap-0.5 flex-1">
-              {Array.from({ length: 30 }).map((_, i) => (
+          <div className="flex items-center gap-2 flex-1 bg-[#1a1a1a] rounded-2xl px-4 h-full border border-red-500/20">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-sm text-red-500 font-bold">{formatTime(recordTime)}</span>
+            <div className="flex items-center gap-0.5 flex-1 justify-center">
+              {Array.from({ length: 20 }).map((_, i) => (
                 <motion.div
                   key={i}
-                  className="w-[2px] rounded-full bg-primary"
-                  animate={{ height: [4, 4 + Math.random() * 16, 4] }}
+                  className="w-[3px] rounded-full bg-purple-500"
+                  animate={{ height: [4, 4 + Math.random() * 20, 4] }}
                   transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.03 }}
                 />
               ))}
             </div>
           </div>
-          <button onClick={() => stopRecording(true)} className="w-10 h-10 rounded-full gradient-primary flex items-center justify-center">
-            <Send size={18} className="text-primary-foreground" />
+          <button onClick={() => stopRecording(true)} className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
+            <Send size={20} className="text-white ml-0.5" />
           </button>
         </motion.div>
       ) : (
-        <div className={`flex items-end gap-2 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-          <button
-            disabled={disabled}
-            onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
-            className="p-2 text-muted-foreground hover:text-primary transition-colors shrink-0"
-          >
-            <Smile size={22} />
-          </button>
-          <button
-            disabled={disabled}
-            onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
-            className="p-2 text-muted-foreground hover:text-primary transition-colors shrink-0"
-          >
-            <Paperclip size={22} />
-          </button>
-          <input
-            ref={inputRef}
-            type="text"
-            disabled={disabled}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              onTyping?.();
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={disabled ? "You cannot message a blocked contact" : t.typeMessage}
-            className="flex-1 bg-muted/50 border border-border/50 rounded-2xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
-          />
-          {text.trim() ? (
-            <motion.button
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              onClick={handleSend}
-              disabled={disabled}
-              className="p-2.5 rounded-full gradient-primary shrink-0"
-            >
-              <Send size={18} className="text-primary-foreground" />
-            </motion.button>
-          ) : (
+        <div className={`flex items-center gap-3 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex-1 bg-[#1a1a1a] rounded-2xl flex items-center px-2 py-1.5 border border-white/5 focus-within:border-purple-500/50 focus-within:ring-4 focus-within:ring-purple-500/10 transition-all duration-300">
             <button
-              onMouseDown={startRecording}
               disabled={disabled}
-              className="p-2 text-muted-foreground hover:text-primary transition-colors shrink-0"
+              onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
+              className="p-2.5 text-zinc-500 hover:text-purple-400 transition-colors shrink-0"
             >
-              <Mic size={22} />
+              <Smile size={22} />
             </button>
-          )}
+            <input
+              ref={inputRef}
+              type="text"
+              disabled={disabled}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                onTyping?.();
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={disabled ? "You cannot message a blocked contact" : "Write something..."}
+              className="flex-1 bg-transparent border-none px-2 py-2 text-[15px] text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-0"
+            />
+            <button
+              disabled={disabled}
+              onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
+              className="p-2.5 text-zinc-500 hover:text-purple-400 transition-colors shrink-0"
+            >
+              <Paperclip size={22} />
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setText(prev => prev + '🌶️')}
+              className="w-11 h-11 rounded-2xl bg-[#1a1a1a] border border-white/5 flex items-center justify-center text-xl hover:bg-purple-500/5 hover:border-purple-500/30 transition-all duration-300"
+              title="Add Spice"
+            >
+              🌶️
+            </button>
+            
+            {text.trim() ? (
+              <motion.button
+                initial={{ scale: 0, rotate: -45 }}
+                animate={{ scale: 1, rotate: 0 }}
+                onClick={handleSend}
+                disabled={disabled}
+                className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-purple-500/30 hover:scale-105 transition-transform"
+              >
+                <Send size={18} className="text-white ml-0.5" />
+              </motion.button>
+            ) : (
+              <button
+                onMouseDown={startRecording}
+                disabled={disabled}
+                className="w-11 h-11 rounded-2xl bg-[#1a1a1a] border border-white/5 flex items-center justify-center text-zinc-500 hover:text-purple-400 transition-colors shrink-0"
+              >
+                <Mic size={22} />
+              </button>
+            )}
+          </div>
         </div>
-
       )}
     </div>
   );

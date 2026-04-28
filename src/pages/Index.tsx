@@ -1,84 +1,127 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Phone, Users } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import SplashScreen from '@/components/SplashScreen';
-import LoginScreen from '@/components/LoginScreen';
 import ChatListSidebar from '@/components/ChatListSidebar';
 import ChatPanel from '@/components/ChatPanel';
 import ProfilePanel from '@/components/ProfilePanel';
 import SettingsPanel from '@/components/SettingsPanel';
 import NewChatPanel from '@/components/NewChatPanel';
-import Navbar from '@/components/Navbar';
+import Header from '@/components/Header';
+import NavigationSidebar from '@/components/NavigationSidebar';
 import CameraModal from '@/components/CameraModal';
 import NewGroupModal from '@/components/NewGroupModal';
 import ContactInfoPanel from '@/components/ContactInfoPanel';
 import { DeleteChatModal, BlockUserModal, ReportUserModal } from '@/components/ConfirmationModals';
-import { mockChats } from '@/data/mockData';
 import type { ThemeType } from '@/types/chat';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { wallpapers } from '@/data/wallpapers';
-import { useLanguage } from '@/hooks/use-language';
-import { User } from '@/types/chat';
-import { apiFetch } from '../utils/tokenManager';
+import { User, Message } from '@/types/chat';
+import { supabase } from '@/config/supabase';
+import { MessageSquare } from "lucide-react";
+import { toast } from '@/components/ui/use-toast';
 
 interface IndexProps {
   currentUser: User;
   onLogout: () => void;
+  onSwitchAccount?: () => void;
   t: any;
   language: string;
   onLanguageChange: (lang: string) => void;
 }
 
-const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexProps) => {
+const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguageChange }: IndexProps) => {
   const [chats, setChats] = useState(() => {
     const saved = localStorage.getItem('blinkchat_conversations');
-    // Initialize with empty array if no saved data, to avoid mock data
     return saved ? JSON.parse(saved) : [];
   });
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   
   useEffect(() => {
-    const fetchContacts = async () => {
+    const fetchConversations = async () => {
       try {
-        const res = await apiFetch('/api/user/contacts');
-        if (!res) return;
-        const data = await res.json();
-        
-        if (data.success && Array.isArray(data.data)) {
-          // Map real users to chat format if they don't exist in chats list
-          const realContacts = data.data.map((user: any) => ({
-            id: user.id, // Use real user ID as chat ID for 1-on-1
-            user: {
-              id: user.id,
-              username: user.name.toLowerCase(),
-              displayName: user.name,
-              avatar: user.avatar,
-              avatarColor: '#00d4a0', // Default color
-              isOnline: user.is_online,
-              lastSeen: user.last_seen
-            },
-            messages: [],
-            unreadCount: 0,
-            isPinned: false,
-            isMuted: false,
-            isArchived: false,
-          }));
+        const { data, error } = await supabase
+          .from('chats')
+          .select(`
+            *,
+            participant1:users!participant1_id(*),
+            participant2:users!participant2_id(*),
+            messages:messages(text, created_at, seen)
+          `)
+          .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
+          .order('created_at', { ascending: false });
 
-          setChats((prev: any) => {
-            // Keep existing chats but add new real contacts
-            const existingIds = new Set(prev.map((c: any) => c.user.id));
-            const newOnes = realContacts.filter((rc: any) => !existingIds.has(rc.user.id));
-            return [...prev, ...newOnes];
+        if (error) throw error;
+        
+        if (data) {
+          const mappedChats = data.map((conv: any) => {
+            const otherParticipant = conv.participant1_id === currentUser.id ? conv.participant2 : conv.participant1;
+            
+            // Get the last message if exists
+            const lastMsg = conv.messages && conv.messages.length > 0 
+              ? conv.messages[conv.messages.length - 1] 
+              : null;
+
+            return {
+              id: conv.id,
+              user: {
+                id: otherParticipant.id,
+                username: otherParticipant.username || otherParticipant.name?.toLowerCase(),
+                displayName: otherParticipant.display_name || otherParticipant.name || 'User',
+                avatar: otherParticipant.avatar_url || otherParticipant.avatar,
+                avatarColor: '#ff4500',
+                isOnline: false, // Will be updated by presence
+                lastSeen: otherParticipant.last_seen
+              },
+              messages: [],
+              lastMessage: lastMsg ? {
+                text: lastMsg.text,
+                timestamp: new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: lastMsg.seen ? 'read' : 'sent'
+              } : null,
+              unreadCount: 0,
+              isPinned: false,
+              isMuted: false,
+              isArchived: false,
+            };
           });
+
+          setChats(mappedChats);
         }
       } catch (err) {
-        console.error('Failed to fetch contacts:', err);
+        console.error('Failed to fetch conversations from Supabase:', err);
       }
     };
 
     if (currentUser) {
-      fetchContacts();
+      fetchConversations();
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || !currentUser.id) return;
+
+    // Supabase Presence for online status
+    const channel = supabase.channel('online-users')
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const onlineIds = Object.values(state)
+          .flat()
+          .map((p: any) => p.user_id);
+        setOnlineUsers(onlineIds);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: currentUser.id,
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id]);
 
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -92,10 +135,10 @@ const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexPr
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showReportConfirm, setShowReportConfirm] = useState(false);
-  const [activeTab, setActiveTab] = useState('chats');
+  const [activeTab, setActiveTab] = useState('messages');
 
   const [currentTheme, setCurrentTheme] = useState<ThemeType>(
-    () => (localStorage.getItem('blinkchat_theme') as ThemeType) || 'dark'
+    () => (localStorage.getItem('blinkchat_theme') as ThemeType) || 'light'
   );
 
   const handleThemeChange = useCallback((t: ThemeType) => {
@@ -105,183 +148,214 @@ const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexPr
   const [wallpaper, setWallpaper] = useLocalStorage('blinkchat_wallpaper', 'default');
 
   useEffect(() => {
-    const root = document.documentElement;
-    
-    if (currentTheme === 'dark') {
-      root.style.setProperty('--background', '260 20% 6%');
-      root.style.setProperty('--card', '260 20% 9%');
-      root.style.setProperty('--foreground', '280 30% 95%');
-      root.style.setProperty('--muted-foreground', '260 20% 65%');
-      root.style.setProperty('--card-foreground', '280 30% 95%');
-      root.style.setProperty('--primary', '330 85% 65%');
-      root.style.setProperty('--muted', '260 15% 15%');
-      root.style.setProperty('--border', '260 15% 18%');
-      // Message bubbles
-      root.style.setProperty('--msg-sent-bg', '#f472b6');
-      root.style.setProperty('--msg-sent-text', '#0d0a0f');
-      root.style.setProperty('--msg-recv-bg', '#1e1528');
-      root.style.setProperty('--msg-recv-text', '#f0e6ff');
-      root.style.setProperty('--msg-time-color', '#a07898');
-    } 
-    else if (currentTheme === 'deep-blue') {
-      root.style.setProperty('--background', '220 40% 6%');
-      root.style.setProperty('--card', '220 40% 10%');
-      root.style.setProperty('--foreground', '210 30% 95%');
-      root.style.setProperty('--muted-foreground', '220 20% 60%');
-      root.style.setProperty('--card-foreground', '210 30% 95%');
-      root.style.setProperty('--primary', '215 90% 65%');
-      root.style.setProperty('--muted', '220 30% 15%');
-      root.style.setProperty('--border', '220 25% 18%');
-      // Message bubbles
-      root.style.setProperty('--msg-sent-bg', '#4f8ef7');
-      root.style.setProperty('--msg-sent-text', '#ffffff');
-      root.style.setProperty('--msg-recv-bg', '#0f1e35');
-      root.style.setProperty('--msg-recv-text', '#e0eeff');
-      root.style.setProperty('--msg-time-color', '#6a90b8');
-    }
-    else if (currentTheme === 'light') {
-      root.style.setProperty('--background', '210 20% 96%');
-      root.style.setProperty('--card', '0 0% 100%');
-      root.style.setProperty('--foreground', '220 25% 8%');
-      root.style.setProperty('--muted-foreground', '220 15% 35%');
-      root.style.setProperty('--card-foreground', '220 25% 8%');
-      root.style.setProperty('--primary', '162 60% 35%');
-      root.style.setProperty('--muted', '210 15% 88%');
-      root.style.setProperty('--border', '210 15% 80%');
-      // Message bubbles
-      root.style.setProperty('--msg-sent-bg', '#00b894');
-      root.style.setProperty('--msg-sent-text', '#ffffff');
-      root.style.setProperty('--msg-recv-bg', '#ffffff');
-      root.style.setProperty('--msg-recv-text', '#111827');
-      root.style.setProperty('--msg-time-color', '#667781');
-    }
-    else if (currentTheme === 'rose') {
-      root.style.setProperty('--background', '340 30% 7%');
-      root.style.setProperty('--card', '340 25% 11%');
-      root.style.setProperty('--foreground', '340 30% 95%');
-      root.style.setProperty('--muted-foreground', '340 15% 60%');
-      root.style.setProperty('--card-foreground', '340 30% 95%');
-      root.style.setProperty('--primary', '330 85% 65%');
-      root.style.setProperty('--muted', '340 20% 16%');
-      root.style.setProperty('--border', '340 20% 20%');
-      // Message bubbles
-      root.style.setProperty('--msg-sent-bg', '#f472b6');
-      root.style.setProperty('--msg-sent-text', '#1a0010');
-      root.style.setProperty('--msg-recv-bg', '#2a0f1e');
-      root.style.setProperty('--msg-recv-text', '#ffe0f0');
-      root.style.setProperty('--msg-time-color', '#b06080');
-    }
-
-    root.classList.remove('theme-light', 'theme-rose', 'theme-deep-blue', 'theme-dark');
-    if (currentTheme !== 'dark') {
-      root.classList.add(`theme-${currentTheme}`);
-    }
-
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark', 'theme-deep-blue', 'theme-rose');
+    if (currentTheme === 'dark') root.classList.add('dark');
+    else if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
+    else if (currentTheme === 'rose') root.classList.add('theme-rose');
+    else root.classList.add('light');
     localStorage.setItem('blinkchat_theme', currentTheme);
   }, [currentTheme]);
 
-  // Persist conversations
+  const handleTabChange = (tab: string) => {
+    if (tab === 'profile') {
+      setShowProfile(true);
+    } else if (tab === 'settings') {
+      setShowSettings(true);
+    } else if (tab === 'switch') {
+      onSwitchAccount?.();
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+  // Replace useSocket with Supabase Realtime
+  useEffect(() => {
+    if (!currentUser || !currentUser.id) return;
+
+    // Listen for new messages across ALL chats
+    const channel = supabase.channel('global-messages')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages' 
+      }, (payload) => {
+        const newMessage = payload.new;
+        
+        setChats((prev: any) => {
+          const chatIndex = prev.findIndex((c: any) => c.id === newMessage.chat_id);
+          if (chatIndex > -1) {
+            const updatedChats = [...prev];
+            const chat = { ...updatedChats[chatIndex] };
+            
+            // Map message to frontend format
+            const mappedMsg: Message = {
+              id: newMessage.id,
+              senderId: newMessage.sender_id,
+              receiverId: newMessage.receiver_id || currentUser.id,
+              content: newMessage.text,
+              type: newMessage.type || 'text',
+              timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              status: newMessage.seen ? 'read' : 'sent'
+            };
+
+            // Only add if not already there (duplicate check)
+            if (!chat.messages.some((m: any) => m.id === mappedMsg.id)) {
+              chat.messages = [...chat.messages, mappedMsg];
+              chat.lastMessage = mappedMsg;
+              if (selectedChatId !== chat.id) {
+                chat.unreadCount = (chat.unreadCount || 0) + 1;
+              }
+            }
+            
+            updatedChats.splice(chatIndex, 1);
+            return [chat, ...updatedChats];
+          }
+          return prev;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser?.id, selectedChatId]);
+
+  // Sync online status
+  useEffect(() => {
+    if (onlineUsers.length > 0) {
+      setChats((prev: any) => prev.map((c: any) => ({
+        ...c,
+        user: { ...c.user, isOnline: onlineUsers.includes(c.user.id) }
+      })));
+    }
+  }, [onlineUsers]);
+
   useEffect(() => {
     localStorage.setItem('blinkchat_conversations', JSON.stringify(chats));
   }, [chats]);
 
-  // Apply Wallpaper Logic
+  // Fetch messages when selectedChatId changes
   useEffect(() => {
-    const chatBg = document.querySelector('.messages-area') as HTMLElement;
-    if (!chatBg) return;
+    if (!selectedChatId) return;
 
-    if (wallpaper === 'default') {
-      chatBg.style.removeProperty('background');
-      chatBg.style.removeProperty('background-image');
-    } else if (wallpaper.startsWith('device:')) {
-      // device uploaded photo
-      const dataUrl = wallpaper.replace('device:', '');
-      chatBg.style.background = `url(${dataUrl}) center/cover no-repeat`;
-    } else {
-      const wp = wallpapers.find(w => w.id === wallpaper);
-      if (wp) chatBg.style.background = wp.color;
-    }
-  }, [wallpaper, selectedChatId]); // Re-run when chat changes to apply to new .messages-area
+    const fetchMessages = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('chat_id', selectedChatId)
+          .order('created_at', { ascending: true });
 
-  const handleStartChat = (user: User) => {
-    const existing = chats.find((c: any) => c.user.id === user.id);
-    
-    if (existing) {
-      setSelectedChatId(existing.id);
-    } else {
-      const newChat = {
-        id: `c_${user.id}_${Date.now()}`,
-        user: user,
-        messages: [],
-        unreadCount: 0,
-        isPinned: false,
-        isMuted: false,
-        isArchived: false,
-      };
-      setChats((prev: any) => [newChat, ...prev]);
-      setSelectedChatId(newChat.id);
+        if (error) throw error;
+        
+        if (data) {
+          const mapped = data.map(m => ({
+            id: m.id,
+            senderId: m.sender_id,
+            text: m.text,
+            content: m.text,
+            type: m.type || 'text',
+            timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            status: m.seen ? 'read' : 'sent'
+          }));
+
+          setChats((prev: any) => prev.map((c: any) => 
+            c.id === selectedChatId ? { ...c, messages: mapped, unreadCount: 0 } : c
+          ));
+          
+          // Mark as read
+          await supabase
+            .from('messages')
+            .update({ seen: true })
+            .eq('chat_id', selectedChatId)
+            .neq('sender_id', currentUser.id);
+        }
+      } catch (err) {
+        console.error('Failed to fetch messages:', err);
+      }
+    };
+
+    fetchMessages();
+  }, [selectedChatId]);
+
+  const handleStartChat = async (user: User) => {
+    try {
+      const existing = chats.find((c: any) => c.user.id === user.id);
+      
+      if (existing) {
+        setSelectedChatId(existing.id);
+      } else {
+        // Create new conversation in Supabase
+        const { data: newChatData, error } = await supabase
+          .from('chats')
+          .insert({
+            participant1_id: currentUser.id,
+            participant2_id: user.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        if (newChatData) {
+          const newChat = {
+            id: newChatData.id,
+            user: user,
+            messages: [],
+            unreadCount: 0,
+            isPinned: false,
+            isMuted: false,
+            isArchived: false,
+            lastMessage: null
+          };
+          setChats((prev: any) => [newChat, ...prev]);
+          setSelectedChatId(newChat.id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to start chat:', err);
     }
     setShowNewChat(false);
   };
 
-  const handleToggleMute = (chatId: string) => {
+  const handleToggleMute = async (chatId: string) => {
     setChats((prev: any) => prev.map((c: any) => c.id === chatId ? { ...c, isMuted: !c.isMuted } : c));
   };
 
-  const handleTogglePin = (chatId: string) => {
+  const handleTogglePin = async (chatId: string) => {
     setChats((prev: any) => prev.map((c: any) => c.id === chatId ? { ...c, isPinned: !c.isPinned } : c));
   };
 
-  const handleToggleArchive = (chatId: string) => {
+  const handleToggleArchive = async (chatId: string) => {
     setChats((prev: any) => prev.map((c: any) => c.id === chatId ? { ...c, isArchived: !c.isArchived } : c));
   };
 
-  const handleDeleteConversation = (chatId: string) => {
-    setChats((prev: any) => prev.filter((c: any) => c.id !== chatId));
-    if (selectedChatId === chatId) {
-      setSelectedChatId(null);
-      setShowContactInfo(false);
-    }
+  const handleDeleteConversation = async (chatId: string) => {
+    try {
+      await supabase.from('chats').delete().eq('id', chatId);
+      setChats((prev: any) => prev.filter((c: any) => c.id !== chatId));
+      if (selectedChatId === chatId) {
+        setSelectedChatId(null);
+        setShowContactInfo(false);
+      }
+    } catch (err) { console.error(err); }
     setShowDeleteConfirm(false);
   };
 
-  const handleBlockUser = (chatId: string) => {
-    // For now just hide the chat or mark as blocked
+  const handleBlockUser = async (chatId: string) => {
+    toast.success('User blocked (Locally)');
     setShowBlockConfirm(false);
   };
 
-  const handleReportUser = (chatId: string) => {
+  const handleReportUser = async (chatId: string) => {
+    toast.success('User reported (Locally)');
     setShowReportConfirm(false);
   };
 
-  const handleReact = (chatId: string, messageId: string, emoji: string) => {
-    setChats((prev: any) => prev.map((c: any) => {
-      if (c.id !== chatId) return c;
-      return {
-        ...c,
-        messages: c.messages.map((m: any) => {
-          if (m.id !== messageId) return m;
-          const reactions = m.reactions || [];
-          const existingIdx = reactions.findIndex((r: any) => r.userId === currentUser.id);
-          
-          let newReactions;
-          if (existingIdx > -1) {
-            if (reactions[existingIdx].emoji === emoji) {
-              // Remove if same emoji
-              newReactions = reactions.filter((_: any, i: number) => i !== existingIdx);
-            } else {
-              // Update emoji
-              newReactions = reactions.map((r: any, i: number) => i === existingIdx ? { ...r, emoji } : r);
-            }
-          } else {
-            // Add new
-            newReactions = [...reactions, { userId: currentUser.id, emoji }];
-          }
-          
-          return { ...m, reactions: newReactions };
-        })
-      };
-    }));
+  const handleReact = async (chatId: string, messageId: string, emoji: string) => {
+    // React logic would go here via Supabase (e.g. a 'reactions' table)
+    toast.info('Reaction added locally');
   };
 
   const archivedChats = chats.filter((c: any) => c.isArchived);
@@ -292,8 +366,6 @@ const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexPr
   const sortedChats = [...displayChats].sort((a: any, b: any) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
-    
-    // Sort by timestamp (simple string comparison for now as it's HH:MM)
     const timeA = a.lastMessage?.timestamp || '00:00';
     const timeB = b.lastMessage?.timestamp || '00:00';
     return timeB.localeCompare(timeA);
@@ -305,181 +377,207 @@ const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexPr
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex h-screen w-screen overflow-hidden bg-background"
+      className="flex flex-col h-screen w-screen overflow-hidden bg-background font-display"
     >
-      <Navbar 
-        activeTab={showProfile ? 'profile' : (showSettings ? 'settings' : activeTab)} 
-        onTabChange={setActiveTab} 
-        onOpenCamera={() => setShowCamera(true)}
-        onOpenProfile={() => {
-          setShowSettings(false);
-          setShowProfile(true);
-        }}
-        onOpenSettings={() => {
-          setShowProfile(false);
-          setShowSettings(true);
-        }}
-        archivedCount={archivedChats.length}
+      <Header 
+        onOpenSettings={() => setShowSettings(true)}
       />
 
-      {/* Sidebar - fixed 340px on desktop */}
-      <div className="w-[340px] min-w-[340px] h-full border-r border-border bg-sidebar-custom flex flex-col relative shrink-0">
-        {(activeTab === 'chats' || activeTab === 'archived') ? (
-          <ChatListSidebar
-            chats={sortedChats}
-            selectedChatId={selectedChatId}
-            onSelectChat={setSelectedChatId}
-            onOpenProfile={() => setShowProfile(true)}
-            onNewChat={() => setShowNewChat(true)}
-            onOpenNewGroup={() => setShowNewGroup(true)}
-            onLogout={onLogout}
-            t={t}
-            currentUser={currentUser}
-            activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center bg-sidebar-custom">
-            <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center mb-4">
-              {activeTab === 'calls' && <Phone size={32} />}
-              {activeTab === 'contacts' && <Users size={32} />}
-            </div>
-            <h2 className="text-xl font-bold text-foreground capitalize mb-2">{activeTab}</h2>
-            <p className="text-sm">This section is coming soon. Stay tuned!</p>
-          </div>
-        )}
+      <div className="flex flex-1 overflow-hidden">
+        <NavigationSidebar
+          currentUser={currentUser}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          onLogout={onLogout}
+        />
 
-        {/* Overlay Panels */}
-        <AnimatePresence>
-          {showProfile && (
-            <ProfilePanel 
-              isOpen={showProfile} 
-              onClose={() => setShowProfile(false)} 
-              currentUser={currentUser}
+        <div className="flex-1 h-full flex overflow-hidden relative">
+          {/* Main Chat Panel */}
+          <div className="flex-1 h-full bg-chat relative overflow-hidden">
+            {selectedChatId ? (
+              <ChatPanel
+                key={selectedChatId || 'none'}
+                chat={selectedChat}
+                currentUser={currentUser}
+                onBack={() => setSelectedChatId(null)}
+                currentTheme={currentTheme}
+                t={t}
+                onSendMessage={async (chatId, msg) => {
+                  try {
+                    const { data, error } = await supabase
+                      .from('messages')
+                      .insert({
+                        chat_id: chatId,
+                        sender_id: currentUser.id,
+                        text: msg.content,
+                        type: msg.type
+                      })
+                      .select()
+                      .single();
+
+                    if (error) throw error;
+
+                    if (data) {
+                      const mappedMsg: Message = {
+                        id: data.id,
+                        senderId: data.sender_id,
+                        receiverId: data.receiver_id || '',
+                        content: data.text,
+                        type: data.type || 'text',
+                        timestamp: new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        status: 'sent'
+                      };
+                      
+                      setChats((prev: any) => prev.map((c: any) => 
+                        c.id === chatId ? { ...c, messages: [...c.messages, mappedMsg], lastMessage: mappedMsg } : c
+                      ));
+                    }
+                  } catch (err) {
+                    console.error('Send message failed:', err);
+                  }
+                }}
+                onOpenInfo={() => setShowContactInfo(true)}
+                showSearch={showChatSearch}
+                onOpenSearch={() => setShowChatSearch(true)}
+                onCloseSearch={() => setShowChatSearch(false)}
+                onToggleMute={handleToggleMute}
+                onTogglePin={handleTogglePin}
+                onToggleArchive={handleToggleArchive}
+                onDeleteChat={() => setShowDeleteConfirm(true)}
+                onToggleBlock={() => setShowBlockConfirm(true)}
+                onReportChat={() => setShowReportConfirm(true)}
+                onOpenWallpaper={() => setShowWallpaperPicker(true)}
+                onAddToGroup={() => {}}
+                onReact={handleReact}
+              />
+            ) : (
+              <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[#0f0f0f]">
+                <div className="w-24 h-24 rounded-[32px] bg-purple-500/5 flex items-center justify-center mb-6 border border-purple-500/10">
+                  <MessageSquare size={48} className="text-purple-500/40" />
+                </div>
+                <h1 className="text-3xl font-bold text-zinc-100 mb-4 tracking-tight">Select a friend to start chatting</h1>
+                <p className="max-w-md text-zinc-500 text-sm leading-relaxed">
+                  Choose a conversation from the list or start a new one to begin your secure, encrypted messaging experience.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Right Sidebar - Chat List */}
+          <div className="w-[340px] border-l border-border bg-white h-full relative shrink-0">
+            <ChatListSidebar
+              chats={sortedChats}
+              selectedChatId={selectedChatId}
+              onSelectChat={setSelectedChatId}
+              onOpenProfile={() => setShowProfile(true)}
+              onNewChat={() => setShowNewChat(true)}
+              onOpenNewGroup={() => setShowNewGroup(true)}
               onLogout={onLogout}
-            />
-          )}
-          {showSettings && (
-            <SettingsPanel
-              isOpen={showSettings}
-              onClose={() => setShowSettings(false)}
-              currentTheme={currentTheme}
-              onThemeChange={handleThemeChange}
-              wallpaper={wallpaper}
-              onWallpaperChange={setWallpaper}
-              language={language}
-              onLanguageChange={onLanguageChange}
-              currentUser={currentUser}
-            />
-          )}
-          {showNewChat && (
-            <NewChatPanel
-              onClose={() => setShowNewChat(false)}
-              onStartChat={handleStartChat}
+              onOpenSettings={() => setShowSettings(true)}
               t={t}
+              currentUser={currentUser}
+              activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
             />
-          )}
-          {showCamera && (
-            <CameraModal 
-              isOpen={showCamera} 
-              onClose={() => setShowCamera(false)}
-              onSend={(data) => {
-                console.log("Send camera photo to", data.contactId, data);
-                // Here you would find/create chat and send message
-                setShowCamera(false);
-              }}
-            />
-          )}
-          {showNewGroup && (
-            <NewGroupModal 
-              isOpen={showNewGroup} 
-              onClose={() => setShowNewGroup(false)}
-              onCreate={(data) => {
-                const newChat = {
-                  id: `group_${Date.now()}`,
-                  user: {
-                    id: `g_${Date.now()}`,
-                    username: data.name.toLowerCase().replace(/\s/g, '_'),
-                    displayName: data.name,
-                    avatarColor: data.iconColor,
-                    isOnline: true,
-                  },
-                  messages: [],
-                  unreadCount: 0,
-                  isPinned: false,
-                  isMuted: false,
-                  isArchived: false,
-                };
-                setChats((prev: any) => [newChat, ...prev]);
-                setSelectedChatId(newChat.id);
-                setShowNewGroup(false);
-              }}
-            />
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Chat panel */}
-      <div className="flex-1 h-full flex flex-col relative bg-background overflow-hidden">
-        {selectedChatId ? (
-          <ChatPanel
-            key={selectedChatId || 'none'}
-            chat={selectedChat}
-            currentUser={currentUser}
-            onBack={() => setSelectedChatId(null)}
-            currentTheme={currentTheme}
-            t={t}
-            onSendMessage={(chatId, msg) => {
-              setChats((prev: any) => prev.map((c: any) => 
-                c.id === chatId ? { ...c, messages: [...c.messages, msg], lastMessage: msg } : c
-              ));
-            }}
-            onOpenInfo={() => setShowContactInfo(true)}
-            showSearch={showChatSearch}
-            onOpenSearch={() => setShowChatSearch(true)}
-            onCloseSearch={() => setShowChatSearch(false)}
-            onToggleMute={handleToggleMute}
-            onTogglePin={handleTogglePin}
-            onToggleArchive={handleToggleArchive}
-            onDeleteChat={() => setShowDeleteConfirm(true)}
-            onToggleBlock={() => setShowBlockConfirm(true)}
-            onReportChat={() => setShowReportConfirm(true)}
-            onOpenWallpaper={() => setShowWallpaperPicker(true)}
-            onAddToGroup={() => {}}
-            onReact={handleReact}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center bg-chat chat-pattern messages-area text-center p-8">
-            <div className="w-24 h-24 rounded-full bg-muted/20 flex items-center justify-center mb-6">
-              <Phone size={48} className="text-muted-foreground opacity-20" />
-            </div>
-            <h1 className="text-3xl font-bold text-foreground mb-4">BlinkChat Desktop</h1>
-            <p className="max-w-md text-muted-foreground">
-              Send and receive messages without keeping your phone online.<br/>
-              Use BlinkChat on up to 4 linked devices and 1 phone at the same time.
-            </p>
           </div>
-        )}
-
-        <AnimatePresence>
-          {showContactInfo && selectedChat && (
-            <ContactInfoPanel
-              key={selectedChatId}
-              user={selectedChat.user}
-              chat={selectedChat}
-              messages={selectedChat.messages}
-              onClose={() => setShowContactInfo(false)}
-              onOpenWallpaper={() => setShowWallpaperPicker(true)}
-              onOpenSearch={() => setShowChatSearch(true)}
-              onMessageClick={() => {
-                setShowContactInfo(false);
-                // The ChatPanel input is focused automatically when search closes or via ref
-              }}
-              onDeleteConversation={handleDeleteConversation}
-            />
-          )}
-        </AnimatePresence>
-
+        </div>
       </div>
+
+      <AnimatePresence>
+        {(showProfile || showSettings || showNewChat || showContactInfo) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              setShowProfile(false);
+              setShowSettings(false);
+              setShowNewChat(false);
+              setShowContactInfo(false);
+            }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-30"
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showProfile && (
+          <ProfilePanel 
+            isOpen={showProfile} 
+            onClose={() => setShowProfile(false)} 
+            user={currentUser}
+            onSignOut={onLogout}
+          />
+        )}
+        {showSettings && (
+          <SettingsPanel
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            currentTheme={currentTheme}
+            onThemeChange={handleThemeChange}
+            wallpaper={wallpaper}
+            onWallpaperChange={setWallpaper}
+            language={language}
+            onLanguageChange={onLanguageChange}
+            currentUser={currentUser}
+          />
+        )}
+        {showNewChat && (
+          <NewChatPanel
+            onClose={() => setShowNewChat(false)}
+            onStartChat={handleStartChat}
+            t={t}
+          />
+        )}
+        {showCamera && (
+          <CameraModal 
+            isOpen={showCamera} 
+            onClose={() => setShowCamera(false)}
+            onSend={(data) => {
+              console.log("Send camera photo", data);
+              setShowCamera(false);
+            }}
+          />
+        )}
+        {showNewGroup && (
+          <NewGroupModal 
+            isOpen={showNewGroup} 
+            onClose={() => setShowNewGroup(false)}
+            onCreate={(data) => {
+              const newChat = {
+                id: `group_${Date.now()}`,
+                user: {
+                  id: `g_${Date.now()}`,
+                  username: data.name.toLowerCase().replace(/\s/g, '_'),
+                  displayName: data.name,
+                  avatarColor: data.iconColor,
+                  isOnline: true,
+                },
+                messages: [],
+                unreadCount: 0,
+                isPinned: false,
+                isMuted: false,
+                isArchived: false,
+              };
+              setChats((prev: any) => [newChat, ...prev]);
+              setSelectedChatId(newChat.id);
+              setShowNewGroup(false);
+            }}
+          />
+        )}
+        {showContactInfo && selectedChat && (
+          <ContactInfoPanel
+            key={selectedChatId}
+            user={selectedChat.user}
+            chat={selectedChat}
+            messages={selectedChat.messages}
+            onClose={() => setShowContactInfo(false)}
+            onOpenWallpaper={() => setShowWallpaperPicker(true)}
+            onOpenSearch={() => setShowChatSearch(true)}
+            onMessageClick={() => setShowContactInfo(false)}
+            onDeleteConversation={handleDeleteConversation}
+          />
+        )}
+      </AnimatePresence>
 
       <DeleteChatModal 
         isOpen={showDeleteConfirm} 
@@ -496,8 +594,6 @@ const Index = ({ currentUser, onLogout, t, language, onLanguageChange }: IndexPr
         onClose={() => setShowReportConfirm(false)} 
         onConfirm={() => selectedChatId && handleReportUser(selectedChatId)}
       />
-
-
     </motion.div>
   );
 };

@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, Bell, Lock, Image as ImageIcon, Globe, Check, Upload, Download, Trash2, UserX, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLocalStorage } from '@/hooks/use-local-storage';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,19 +32,27 @@ const themes: { key: ThemeType; label: string; fill: string; border: string }[] 
 
 const languages = ['English', 'Hindi', 'Spanish', 'French'];
 
-const SettingsItem = ({ icon, title, subtitle, onClick }: { icon: React.ReactNode, title: string, subtitle: string, onClick?: () => void }) => (
-  <button onClick={onClick}
-    className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl hover:bg-muted/30 transition-colors">
-    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-      {icon}
-    </div>
-    <div className="text-left">
-      <p className="text-[15px] font-semibold text-foreground leading-tight">{title}</p>
-      <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>
-    </div>
-    <ChevronRight size={16} className="text-muted-foreground ml-auto" />
-  </button>
+const SettingsItem = React.forwardRef<HTMLButtonElement, { icon: React.ReactNode, title: string, subtitle: string, onClick?: () => void }>(
+  ({ icon, title, subtitle, onClick, ...props }, ref) => (
+    <button 
+      ref={ref}
+      onClick={onClick}
+      {...props}
+      className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl hover:bg-muted/30 transition-colors"
+    >
+      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+        {icon}
+      </div>
+      <div className="text-left">
+        <p className="text-[15px] font-semibold text-foreground leading-tight">{title}</p>
+        <p className="text-[13px] text-muted-foreground mt-0.5">{subtitle}</p>
+      </div>
+      <ChevronRight size={16} className="text-muted-foreground ml-auto" />
+    </button>
+  )
 );
+
+SettingsItem.displayName = 'SettingsItem';
 
 const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper, onWallpaperChange, language, onLanguageChange, currentUser }: SettingsPanelProps) => {
   const safeT = translations[language as keyof typeof translations] || translations['English'];
@@ -94,6 +102,7 @@ const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Notifications</DialogTitle>
+              <DialogDescription className="sr-only">Manage your notification preferences.</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="flex items-center justify-between">
@@ -129,6 +138,7 @@ const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Privacy</DialogTitle>
+              <DialogDescription className="sr-only">Manage your privacy and read receipts.</DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="space-y-3">
@@ -161,6 +171,7 @@ const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Chat Wallpaper</DialogTitle>
+              <DialogDescription className="sr-only">Customize the background of your chat screens.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-3 gap-4 py-4">
               {wallpapers.map(wp => (
@@ -209,6 +220,7 @@ const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>App Language</DialogTitle>
+              <DialogDescription className="sr-only">Select your preferred application language.</DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-2 mt-4">
               {languages.map(lang => (

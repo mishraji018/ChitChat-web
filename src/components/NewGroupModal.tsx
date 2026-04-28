@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Users, Search, Check, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { registeredUsers } from '@/data/mockData';
+import { supabase } from '@/config/supabase';
 import UserAvatar from './Avatar';
 
 interface NewGroupModalProps {
@@ -20,6 +20,17 @@ const NewGroupModal = ({ isOpen, onClose, onCreate }: NewGroupModalProps) => {
   const [selectedColor, setSelectedColor] = useState(colors[0]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const fetchUsers = async () => {
+        const { data } = await supabase.from('users').select('*');
+        if (data) setUsers(data);
+      };
+      fetchUsers();
+    }
+  }, [isOpen]);
 
   const toggleMember = (id: string) => {
     setSelectedMembers(prev => 
@@ -34,9 +45,9 @@ const NewGroupModal = ({ isOpen, onClose, onCreate }: NewGroupModalProps) => {
     }
   };
 
-  const filteredUsers = registeredUsers.filter(u => 
-    u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.username.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredUsers = users.filter(u => 
+    (u.display_name || u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.username || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (!isOpen) return null;
@@ -108,10 +119,10 @@ const NewGroupModal = ({ isOpen, onClose, onCreate }: NewGroupModalProps) => {
             {selectedMembers.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-4 p-2 bg-muted/30 rounded-2xl max-h-32 overflow-y-auto">
                 {selectedMembers.map(id => {
-                  const user = registeredUsers.find(u => u.id === id);
+                  const user = users.find(u => u.id === id);
                   return (
                     <div key={id} className="flex items-center gap-1.5 bg-card border border-border px-2.5 py-1 rounded-full text-xs">
-                      <span>{user?.displayName}</span>
+                      <span>{user?.display_name || user?.name}</span>
                       <button onClick={() => toggleMember(id)} className="text-muted-foreground hover:text-destructive">
                         <X size={12} />
                       </button>
@@ -135,15 +146,16 @@ const NewGroupModal = ({ isOpen, onClose, onCreate }: NewGroupModalProps) => {
             <div className="space-y-1 max-h-60 overflow-y-auto pr-2 scrollbar-thin">
               {filteredUsers.map(user => {
                 const isSelected = selectedMembers.includes(user.id);
+                const name = user.display_name || user.name || 'User';
                 return (
                   <button
                     key={user.id}
                     onClick={() => toggleMember(user.id)}
                     className={`w-full flex items-center gap-3 p-2 rounded-xl transition-all ${isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'}`}
                   >
-                    <UserAvatar name={user.displayName} color={user.avatarColor} size="sm" isOnline={user.isOnline} />
+                    <UserAvatar name={name} image={user.avatar_url} size="sm" isOnline={user.is_online} color="purple" />
                     <div className="flex-1 text-left">
-                      <p className="text-sm font-medium text-foreground">{user.displayName}</p>
+                      <p className="text-sm font-medium text-foreground">{name}</p>
                       <p className="text-[11px] text-muted-foreground">@{user.username}</p>
                     </div>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>

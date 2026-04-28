@@ -7,7 +7,7 @@ import Index from "./pages/Index.tsx";
 import SplashScreen from "@/components/SplashScreen";
 import LoginScreen from "@/components/LoginScreen";
 import UsernameScreen from "@/components/UsernameScreen";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/config/supabase";
 import { syncGoogleAuth, completeGoogleSignup } from "@/services/authService";
 import { useLanguage } from "@/hooks/use-language";
 import { useInternet } from '@/hooks/use-internet';
@@ -63,20 +63,30 @@ const App = () => {
   const handleUsernameComplete = async (username: string) => {
     setLoading(true);
     try {
-      const res = await completeGoogleSignup({
-        userId: tempAuthUser.id,
+      const newUser = {
+        id: tempAuthUser.id,
         email: tempAuthUser.email,
         username,
-        avatar_url: tempAuthUser.user_metadata.avatar_url
-      });
+        display_name: tempAuthUser.user_metadata.full_name || username,
+        avatar_url: tempAuthUser.user_metadata.avatar_url,
+        is_online: true,
+        last_seen: new Date().toISOString()
+      };
 
-      if (!res.success) throw new Error(res.message);
+      const { data, error } = await supabase
+        .from('users')
+        .insert(newUser)
+        .select()
+        .single();
 
-      setCurrentUser(res.data.user);
+      if (error) throw error;
+
+      setCurrentUser(data);
       setIsLoggedIn(true);
       setShowUsernameScreen(false);
-      toast.success(`Welcome to ChitChat, ${username}!`);
+      toast.success(`Welcome to Blink, ${username}!`);
     } catch (err: any) {
+      console.error('Error in handleUsernameComplete:', err);
       toast.error(err.message || 'Failed to set username');
     } finally {
       setLoading(false);
@@ -86,6 +96,28 @@ const App = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.reload();
+  };
+
+  const handleSwitchAccount = async () => {
+    try {
+      setLoading(true);
+      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          queryParams: {
+            prompt: 'select_account',
+            access_type: 'offline',
+          },
+          redirectTo: window.location.origin
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to switch account');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOnline) return <NoInternet onRetry={retry} />;
@@ -106,6 +138,7 @@ const App = () => {
             <Index 
               currentUser={currentUser} 
               onLogout={handleLogout} 
+              onSwitchAccount={handleSwitchAccount}
               t={t}
               language={language}
               onLanguageChange={changeLanguage}

@@ -4,6 +4,7 @@ import { useLocalStorage } from '@/hooks/use-local-storage';
 import UserAvatar from './Avatar';
 import { Chat } from '@/types/chat';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/config/supabase';
 
 interface ChatListItemProps {
   chat: Chat;
@@ -14,6 +15,12 @@ interface ChatListItemProps {
 
 const ChatListItem = ({ chat, isActive, onClick, currentUser }: ChatListItemProps) => {
   const [nickname] = useLocalStorage(`nickname_${chat.user.id}`, chat.user.displayName);
+  const [isOnline, setIsOnline] = useState(chat.user.isOnline);
+
+  useEffect(() => {
+    // Relying on chat.user.isOnline which is updated by Index.tsx
+    setIsOnline(chat.user.isOnline);
+  }, [chat.user.isOnline]);
 
   const lastMsg = chat.lastMessage;
   const isMyMessage = lastMsg?.senderId === currentUser.id;
@@ -55,43 +62,37 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: ChatListItemProp
       <div 
         onClick={onClick}
         onContextMenu={handleContextMenu}
-        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer relative transition-colors duration-150 group
-          ${isActive ? 'bg-muted/60' : 'hover:bg-muted/40'}`}
+        className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer relative transition-all duration-300 group mx-2 my-1 rounded-2xl
+          ${isActive ? 'bg-[#1a1a1a] shadow-lg shadow-purple-500/5' : 'hover:bg-[#1a1a1a]/50'}`}
       >
         {/* Avatar */}
         <div className="relative shrink-0">
-          <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={chat.user.isOnline} />
+          <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isOnline} className="w-12 h-12" />
+          {isOnline && (
+            <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0f0f0f] shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+          )}
         </div>
 
         {/* Content section */}
-        <div className="flex-1 min-w-0 border-b border-border/30 pb-2.5">
-          <div className="flex justify-between items-center">
-            {/* Name + icons */}
-            <div className="flex items-center gap-1 min-w-0">
-              <h3 className={`font-semibold text-[15px] truncate flex-1 ${isActive ? 'text-primary' : 'text-foreground'}`}>
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-center mb-1">
+            <h3 className={`font-bold text-[14px] truncate flex-1 tracking-tight ${isActive ? 'text-purple-400' : 'text-zinc-200'}`}>
               {nickname}
             </h3>
-              <div className="flex items-center gap-1 shrink-0">
-                {chat.isPinned && <Pin size={11} className="text-primary" />}
-                {chat.isMuted && <BellOff size={11} className="text-muted-foreground" />}
-              </div>
-            </div>
-            {/* Time */}
-            <span className={`text-[11px] shrink-0 font-medium ${unreadCount > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
+            <span className={`text-[10px] shrink-0 font-medium tracking-tight ${unreadCount > 0 ? 'text-purple-400' : 'text-zinc-500'}`}>
               {lastMsg?.timestamp || ''}
             </span>
           </div>
 
-          <div className="flex justify-between items-center mt-0.5">
-            {/* Message preview */}
-            <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
               {isMyMessage && lastMsg && (
-                <span className={`text-xs shrink-0 font-bold ${lastMsg.status === 'read' ? 'text-blue-400' : 'text-muted-foreground'}`}>
-                  {lastMsg.isQueued ? '🕐' : lastMsg.status === 'sent' ? '✓' : '✓✓'}
+                <span className={`text-[11px] shrink-0 font-bold ${lastMsg.status === 'read' ? 'text-purple-400' : 'text-zinc-600'}`}>
+                  {lastMsg.status === 'read' ? '✓✓' : '✓'}
                 </span>
               )}
               {renderMediaIcon()}
-              <span className="text-sm text-muted-foreground truncate leading-tight">
+              <span className="text-[12px] text-zinc-500 truncate leading-tight font-medium">
                  {chat.user.displayName.includes('Group') ? `~ ${lastMsg?.senderId === currentUser.id ? 'You' : 'Member'}: ` : ''}
                  {!chat.user.isOnline && !lastMsg && chat.user.lastSeen ? `Last seen ${chat.user.lastSeen}` : getPreviewText()}
               </span>
@@ -100,7 +101,7 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: ChatListItemProp
             {/* Badges */}
             <div className="shrink-0 ml-1 flex items-center gap-1">
               {unreadCount > 0 && (
-                <span className={`${chat.isMuted ? 'bg-muted' : 'bg-primary'} text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1`}>
+                <span className={`${chat.isMuted ? 'bg-muted' : 'bg-primary'} text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1.5 shadow-sm`}>
                   {unreadCount}
                 </span>
               )}

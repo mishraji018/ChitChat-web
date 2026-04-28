@@ -1,242 +1,144 @@
-import { useState, useRef } from 'react';
-import { X, Camera, Copy, LogOut, Pencil, Phone, Lock } from 'lucide-react';
-import { User } from '@/types/chat';
-import UserAvatar from './Avatar';
-import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'sonner';
-import { useLocalStorage } from '@/hooks/use-local-storage';
-import ImageCropModal from './ImageCropModal';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { supabase } from '@/config/supabase';
 
 interface ProfilePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  currentUser: User;
-  onLogout: () => void;
+  user: any;
+  onSignOut: () => void;
 }
 
-const ProfilePanel = ({ isOpen, onClose, currentUser, onLogout }: ProfilePanelProps) => {
-  const [avatarUrl, setAvatarUrl] = useLocalStorage('blinkchat_avatarUrl', '');
-  const [displayName, setDisplayName] = useLocalStorage('blinkchat_displayName', currentUser.displayName);
-  const [status, setStatus] = useLocalStorage('blinkchat_status', currentUser.status);
+const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) => {
+  const [bio, setBio] = useState(user?.bio || 'Available');
+  const [isEditing, setIsEditing] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem('blinkchat_theme') || 'dark');
 
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editName, setEditName] = useState(displayName);
-
-  const [isEditingStatus, setIsEditingStatus] = useState(false);
-  const [editStatus, setEditStatus] = useState(status);
-  
-  const [appPin, setAppPin] = useLocalStorage('blinkchat_app_pin', '');
-  
-  const [tempImage, setTempImage] = useState<string | null>(null);
-  const [showCropModal, setShowCropModal] = useState(false);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleCopyUsername = () => {
-    navigator.clipboard.writeText(`@${currentUser.username}`);
-    toast.success('Copied!');
-  };
-
-  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setTempImage(reader.result as string);
-        setShowCropModal(true);
-      };
-      reader.readAsDataURL(file);
+  // Sync theme with document
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
     }
-  };
+    localStorage.setItem('blinkchat_theme', theme);
+  }, [theme]);
 
-  const handleCropComplete = async (blob: Blob) => {
-    setShowCropModal(false);
-    const url = URL.createObjectURL(blob);
-    setAvatarUrl(url);
-    
-    // Save to backend
+  const handleSaveBio = async () => {
     try {
-      const formData = new FormData();
-      formData.append('avatar', blob, 'avatar.jpg');
+      const { error } = await supabase
+        .from('users')
+        .update({ bio })
+        .eq('id', user.id);
       
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const res = await fetch(`${API_URL}/api/auth/update-avatar`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('blinkchat_token')}` },
-        body: formData
-      });
-      
-      if (res.ok) {
-        toast.success('Profile picture updated!');
-      }
+      if (error) throw error;
+      setIsEditing(false);
     } catch (err) {
-      console.error('Avatar upload error:', err);
+      console.error('Failed to update bio:', err);
     }
-  };
-
-  const saveName = () => {
-    if (editName.trim()) setDisplayName(editName.trim());
-    else setEditName(displayName);
-    setIsEditingName(false);
-  };
-
-  const saveStatus = () => {
-    if (editStatus.trim()) setStatus(editStatus.trim());
-    else setEditStatus(status);
-    setIsEditingStatus(false);
   };
 
   if (!isOpen) return null;
 
   return (
-    <motion.div
-      initial={{ x: -100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: -100, opacity: 0 }}
-      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-      className="absolute inset-y-0 left-0 z-40 bg-card flex flex-col w-full lg:w-[340px] lg:border-r lg:border-border shadow-2xl"
-    >
-      {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-border">
-        <button onClick={onClose} className="p-1 hover:bg-muted rounded-full transition-colors">
-          <X size={20} />
-        </button>
-        <h2 className="font-bold text-lg">Profile</h2>
-      </div>
+    <div className="fixed inset-0 z-50 flex justify-start pointer-events-none">
+      {/* Backdrop */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto"
+      />
 
-      {/* Cover gradient */}
-      <div className="h-28 bg-gradient-to-br from-pink-500 to-fuchsia-600 relative shrink-0" />
+      {/* Panel */}
+      <motion.div
+        initial={{ x: '-100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '-100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className="relative w-full max-w-[340px] h-full bg-[#0f0f0f] border-r border-white/10 flex flex-col pointer-events-auto shadow-2xl"
+      >
+        {/* Header */}
+        <div className="p-6 flex items-center justify-between border-b border-white/5">
+          <h2 className="text-xl font-bold text-white">Profile</h2>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors text-2xl font-light">×</button>
+        </div>
 
-      {/* Avatar Section */}
-      <div className="flex flex-col items-center -mt-12 px-4 shrink-0">
-        <div className="relative">
-          <UserAvatar name={displayName} color={currentUser.avatarColor} size="xl" image={avatarUrl || undefined} />
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-none">
+          {/* Avatar & Name */}
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-700 p-1 shadow-xl">
+              <div className="w-full h-full rounded-[1.4rem] overflow-hidden bg-[#1a1a1a] flex items-center justify-center">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-4xl font-bold text-white">{(user?.username || user?.email || '?')[0].toUpperCase()}</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-white tracking-tight">{user?.username || user?.display_name || 'User'}</h3>
+              <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
+            </div>
+          </div>
+
+          {/* Bio Section */}
+          <div className="space-y-3">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">About</label>
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  autoFocus
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  className="w-full bg-[#1a1a1a] border border-purple-500/30 rounded-2xl p-4 text-sm text-zinc-300 outline-none focus:ring-2 focus:ring-purple-500/20 resize-none"
+                  rows={3}
+                />
+                <button 
+                  onClick={handleSaveBio}
+                  className="w-full py-2 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-500 transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            ) : (
+              <div 
+                onClick={() => setIsEditing(true)}
+                className="bg-[#1a1a1a] border border-white/5 rounded-2xl p-4 text-sm text-zinc-400 hover:bg-white/5 cursor-pointer transition-all"
+              >
+                {bio}
+              </div>
+            )}
+          </div>
+
+          {/* Theme Toggle */}
+          <div className="space-y-3">
+            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Settings</label>
+            <div className="flex items-center justify-between bg-[#1a1a1a] border border-white/5 rounded-2xl p-4">
+              <span className="text-sm font-bold text-zinc-200">Dark Mode</span>
+              <button 
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className={`w-12 h-6 rounded-full transition-all relative ${theme === 'dark' ? 'bg-purple-600' : 'bg-zinc-700'}`}
+              >
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${theme === 'dark' ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Sign Out */}
+        <div className="p-6 border-t border-white/5">
           <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-primary flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+            onClick={onSignOut}
+            className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-rose-600/20"
           >
-            <Camera size={16} className="text-white" />
-          </button>
-          <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleAvatarSelect} />
-        </div>
-
-        {/* Editable Name */}
-        <div className="mt-4 flex items-center gap-2">
-          {isEditingName ? (
-            <input 
-              autoFocus 
-              value={editName} 
-              onChange={e => setEditName(e.target.value)}
-              onBlur={saveName} 
-              onKeyDown={e => e.key === 'Enter' && saveName()}
-              className="text-xl font-bold bg-muted rounded-lg px-3 py-1 text-center border-none outline-none ring-1 ring-primary/30" 
-            />
-          ) : (
-            <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-          )}
-          <button onClick={() => setIsEditingName(true)} className="text-muted-foreground hover:text-primary transition-colors">
-            <Pencil size={14} />
+            Sign Out
           </button>
         </div>
-
-        {/* Username */}
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-1 cursor-pointer hover:text-foreground transition-colors" onClick={handleCopyUsername}>
-          <span>@{currentUser.username}</span>
-          <Copy size={13} />
-        </div>
-      </div>
-
-      {/* About Section */}
-      <div className="px-5 mt-8">
-        <label className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 block">About</label>
-        {isEditingStatus ? (
-          <div className="relative">
-            <textarea 
-              autoFocus 
-              value={editStatus} 
-              onChange={e => setEditStatus(e.target.value)}
-              onBlur={saveStatus} 
-              maxLength={100} 
-              rows={3}
-              className="w-full bg-muted/50 border border-primary/50 rounded-xl px-4 py-3 text-sm resize-none outline-none focus:ring-1 focus:ring-primary/30" 
-            />
-            <span className="absolute bottom-2 right-3 text-xs text-muted-foreground">{editStatus.length}/100</span>
-          </div>
-        ) : (
-          <div 
-            onClick={() => setIsEditingStatus(true)}
-            className="w-full bg-muted/30 border border-border/30 hover:border-border/60 rounded-xl px-4 py-3 text-sm cursor-pointer flex items-start justify-between gap-2 transition-all"
-          >
-            <span className="text-foreground leading-relaxed">{status}</span>
-            <Pencil size={13} className="text-muted-foreground shrink-0 mt-0.5" />
-          </div>
-        )}
-      </div>
-
-      {/* Mobile Number Section */}
-      <div className="px-5 mt-4">
-        <label className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 block">Mobile Number</label>
-        <div className="flex items-center gap-2 bg-muted/30 border border-border/30 rounded-xl px-4 py-3 group">
-          <Phone size={14} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">+91 {currentUser.mobileNumber || 'N/A'}</span>
-          <span className="ml-auto text-[10px] font-medium text-muted-foreground bg-muted p-1 rounded">Read-only</span>
-        </div>
-      </div>
-
-      {/* Security Section */}
-      <div className="px-5 mt-4 text-left">
-        <label className="text-xs font-semibold text-primary uppercase tracking-wider mb-2 block">Security</label>
-        <button 
-          onClick={() => {
-            const pin = prompt('Enter new 4-digit PIN (or leave empty to disable):');
-            if (pin === null) return;
-            if (pin === '' || /^\d{4}$/.test(pin)) {
-              setAppPin(pin);
-              toast.success(pin ? 'App Lock enabled!' : 'App Lock disabled!');
-            } else {
-              toast.error('PIN must be 4 digits');
-            }
-          }}
-          className="w-full flex items-center justify-between bg-muted/30 border border-border/30 rounded-xl px-4 py-3 hover:bg-muted/50 transition-all text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <Lock size={14} className="text-primary" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-foreground">App Lock</span>
-              <span className="text-[10px] text-muted-foreground">Require PIN to open app</span>
-            </div>
-          </div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${appPin ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
-            {appPin ? 'Enabled' : 'Disabled'}
-          </span>
-        </button>
-      </div>
-
-      <div className="flex-1" />
-
-      {/* Logout */}
-      <div className="p-4 border-t border-border">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-destructive hover:bg-destructive/10 transition-colors font-medium border border-destructive/10"
-        >
-          <LogOut size={18} />
-          Logout
-        </button>
-      </div>
-      {/* Image Crop Modal */}
-      <AnimatePresence>
-        {showCropModal && tempImage && (
-          <ImageCropModal 
-            imageSrc={tempImage} 
-            onCropComplete={handleCropComplete} 
-            onCancel={() => setShowCropModal(false)}
-          />
-        )}
-      </AnimatePresence>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 };
 

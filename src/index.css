@@ -6,143 +6,109 @@
 
 @layer base {
   :root {
-    --background: 276 20% 5%;
-    --foreground: 292 100% 97%;
-    --card: 277 33% 9%;
-    --card-foreground: 292 100% 97%;
-    --popover: 277 33% 9%;
-    --popover-foreground: 292 100% 97%;
-    --primary: 329 86% 70%;
-    --primary-foreground: 276 20% 5%;
-    --secondary: 273 33% 12%;
-    --secondary-foreground: 325 21% 62%;
-    --muted: 273 33% 12%;
-    --muted-foreground: 322 16% 36%;
-    --accent: 292 84% 73%;
-    --accent-foreground: 276 20% 5%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 329 86% 70%;
-    --input: 273 33% 12%;
-    --ring: 329 86% 70%;
-    --radius: 0.75rem;
-
-    /* BlinkChat custom tokens */
-    --gradient-primary: linear-gradient(135deg, #f472b6, #e879f9);
-    --gradient-sent: linear-gradient(135deg, #f472b6, #e879f9);
-    --bubble-received: 277 33% 9%;
-    --bubble-sent: 329 86% 70%;
-    --chat-bg: 276 20% 5%;
-    --sidebar-bg: 280 26% 7%;
-    --online: 329 86% 70%;
-    --typing: 329 86% 70%;
-
-    /* Message bubble fallbacks (Dark) */
-    --msg-sent-bg: #f472b6;
-    --msg-sent-text: #0d0a0f;
-    --msg-recv-bg: #1e1528;
-    --msg-recv-text: #f0e6ff;
-    --msg-time-color: #a07898;
-
-    --sidebar-background: 280 26% 7%;
-    --sidebar-foreground: 325 21% 62%;
-    --sidebar-primary: 329 86% 70%;
-    --sidebar-primary-foreground: 276 20% 5%;
-    --sidebar-accent: 273 33% 12%;
-    --sidebar-accent-foreground: 325 21% 62%;
-    --sidebar-border: 329 86% 70%;
-    --sidebar-ring: 329 86% 70%;
-
-    font-family: 'Inter', system-ui, sans-serif;
-  }
-
-  /* Deep Blue theme */
-  .theme-deep-blue {
-    --background: 276 20% 5%;
-    --foreground: 292 100% 97%;
-    --card: 277 33% 9%;
-    --card-foreground: 292 100% 97%;
-    --popover: 277 33% 9%;
-    --popover-foreground: 292 100% 97%;
-    --primary: 329 86% 70%;
-    --primary-foreground: 276 20% 5%;
-    --secondary: 273 33% 12%;
-    --muted: 273 33% 12%;
-    --muted-foreground: 322 16% 36%;
-    --accent: 292 84% 73%;
-    --border: 329 86% 70%;
-    --input: 273 33% 12%;
-    --ring: 329 86% 70%;
-    --gradient-primary: linear-gradient(135deg, #f472b6, #e879f9);
-    --gradient-sent: linear-gradient(135deg, #f472b6, #e879f9);
-    --bubble-sent: 329 86% 70%;
-    --bubble-received: 277 33% 9%;
-    --chat-bg: 276 20% 5%;
-    --sidebar-bg: 280 26% 7%;
-    --online: 329 86% 70%;
-  }
-
-  /* Light theme */
-  .theme-light {
-    --foreground: 220 25% 8%;
-    --background: 210 20% 96%;
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 8%;
+    --card-foreground: 220 25% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 8%;
-    --primary: 162 60% 35%;
+    --popover-foreground: 220 25% 10%;
+    --primary: 16 100% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 15% 88%;
-    --secondary-foreground: 220 25% 8%;
-    --muted: 210 15% 88%;
-    --muted-foreground: 220 15% 35%;
-    --accent: 162 60% 35%;
-    --accent-foreground: 0 0% 100%;
-    --border: 210 15% 80%;
-    --input: 210 15% 88%;
-    --ring: 162 60% 35%;
-    --gradient-primary: linear-gradient(135deg, hsl(162, 60%, 35%), hsl(190, 80%, 42%));
-    --gradient-sent: linear-gradient(135deg, hsl(168, 100%, 36%), hsl(170, 80%, 36%));
-    --bubble-sent: 168 100% 36%;
+    --secondary: 210 20% 94%;
+    --secondary-foreground: 220 25% 20%;
+    --muted: 210 20% 94%;
+    --muted-foreground: 220 10% 45%;
+    --accent: 16 100% 96%;
+    --accent-foreground: 16 100% 40%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 20% 90%;
+    --input: 210 20% 94%;
+    --ring: 16 100% 50%;
+    --radius: 1.5rem;
+
+    /* Blink premium tokens */
+    --gradient-primary: linear-gradient(135deg, #ff4500, #ff8c00);
+    --bubble-sent: 16 100% 50%;
     --bubble-received: 0 0% 100%;
-    --chat-bg: 210 18% 95%;
-    --sidebar-bg: 216 12% 95%;
-    --online: 145 80% 50%;
-    --sidebar-background: 216 12% 95%;
-    --sidebar-foreground: 220 25% 8%;
-    --sidebar-border: 210 15% 80%;
+    --chat-bg: 210 20% 98%;
+    --sidebar-bg: 0 0% 100%;
+    --online: 142 70% 45%;
+    --typing: 16 100% 50%;
+
+    /* Custom Border Radii */
+    --radius-sm: 0.75rem;
+    --radius-md: 1rem;
+    --radius-lg: 1.5rem;
+    --radius-xl: 2rem;
+
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
   }
 
-  /* Rose theme */
-  .theme-rose {
-    --background: 340 30% 5%;
-    --foreground: 340 10% 92%;
-    --card: 340 25% 9%;
-    --card-foreground: 340 10% 92%;
-    --popover: 340 28% 7%;
-    --popover-foreground: 340 10% 92%;
-    --primary: 330 80% 65%;
-    --primary-foreground: 340 30% 5%;
-    --secondary: 340 18% 15%;
-    --muted: 340 15% 13%;
-    --muted-foreground: 340 10% 55%;
-    --accent: 340 70% 60%;
-    --border: 340 15% 18%;
-    --input: 340 15% 13%;
-    --ring: 330 80% 65%;
-    --gradient-primary: linear-gradient(135deg, hsl(330, 80%, 65%), hsl(350, 70%, 55%));
-    --gradient-sent: linear-gradient(135deg, hsl(330, 50%, 30%), hsl(340, 45%, 25%));
-    --bubble-sent: 330 45% 28%;
-    --bubble-received: 340 20% 13%;
-    --chat-bg: 340 30% 6%;
-    --sidebar-bg: 340 28% 7%;
-    --online: 145 80% 50%;
+  /* Dark mode overrides if needed */
+  .dark {
+    --background: 220 25% 10%;
+    --foreground: 210 20% 98%;
+    --card: 220 25% 12%;
+    --card-foreground: 210 20% 98%;
+    --popover: 220 25% 12%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 16 100% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 25% 18%;
+    --secondary-foreground: 210 20% 90%;
+    --muted: 220 25% 18%;
+    --muted-foreground: 220 10% 65%;
+    --accent: 220 25% 18%;
+    --accent-foreground: 210 20% 98%;
+    --border: 220 25% 20%;
+    --input: 220 25% 18%;
+    --ring: 16 100% 60%;
+    --chat-bg: 220 25% 8%;
+    --sidebar-bg: 220 25% 12%;
+    --bubble-received: 220 25% 18%;
+  }
+
+  .deep-blue {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 14%;
+    --card-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --secondary: 217 33% 20%;
+    --muted: 217 33% 20%;
+    --muted-foreground: 215 20% 65%;
+    --border: 217 33% 25%;
+    --chat-bg: 222 47% 8%;
+    --sidebar-bg: 222 47% 14%;
+    --bubble-sent: 217 91% 60%;
+    --bubble-received: 217 33% 20%;
+    --ring: 217 91% 60%;
+    --gradient-primary: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  }
+
+  .rose {
+    --background: 340 40% 5%;
+    --foreground: 340 20% 98%;
+    --card: 340 40% 8%;
+    --card-foreground: 340 20% 98%;
+    --primary: 340 82% 60%;
+    --secondary: 340 30% 15%;
+    --muted: 340 30% 15%;
+    --muted-foreground: 340 10% 65%;
+    --border: 340 30% 20%;
+    --chat-bg: 340 40% 4%;
+    --sidebar-bg: 340 40% 8%;
+    --bubble-sent: 340 82% 60%;
+    --bubble-received: 340 30% 15%;
+    --ring: 340 82% 60%;
+    --gradient-primary: linear-gradient(135deg, #e11d48, #9f1239);
   }
 }
 
 @layer base {
   * {
-    border-color: rgba(244, 114, 182, 0.25);
+    border-color: hsl(var(--border) / 0.5);
   }
   body {
     @apply bg-background text-foreground;

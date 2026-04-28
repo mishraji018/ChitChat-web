@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Camera, RotateCw, Check, User, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { registeredUsers } from '@/data/mockData';
+import { supabase } from '@/config/supabase';
 
 interface CameraModalProps {
   isOpen: boolean;
@@ -16,6 +16,17 @@ const CameraModal = ({ isOpen, onClose, onSend }: CameraModalProps) => {
   const [caption, setCaption] = useState('');
   const [selectedContact, setSelectedContact] = useState('');
   const [rotation, setRotation] = useState(0);
+  const [users, setUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const fetchUsers = async () => {
+        const { data } = await supabase.from('users').select('*');
+        if (data) setUsers(data);
+      };
+      fetchUsers();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && !capturedImage) {
@@ -141,8 +152,8 @@ const CameraModal = ({ isOpen, onClose, onSend }: CameraModalProps) => {
                     onChange={(e) => setSelectedContact(e.target.value)}
                   >
                     <option value="">Select a contact...</option>
-                    {registeredUsers.map(user => (
-                      <option key={user.id} value={user.id}>{user.displayName}</option>
+                    {users.map(user => (
+                      <option key={user.id} value={user.id}>{user.display_name || user.name}</option>
                     ))}
                   </select>
                 </div>

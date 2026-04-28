@@ -34,7 +34,7 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
     const parts = text.split(new RegExp(`(${query})`, 'gi'));
     return parts.map((part, i) =>
       part.toLowerCase() === query.toLowerCase()
-        ? <mark key={i} className="bg-primary/40 text-foreground rounded px-0.5">{part}</mark>
+        ? <mark key={i} className="bg-purple-500/40 text-zinc-100 rounded px-0.5 font-bold">{part}</mark>
         : part
     );
   };
@@ -88,32 +88,34 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
       initial={isSent ? { opacity: 0, x: 20, scale: 0.95 } : { opacity: 0, x: -20, scale: 0.95 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className={`flex w-full mb-1 ${isSent ? 'justify-end' : 'justify-start'} group`}
+      className={`flex w-full mb-2 ${isSent ? 'justify-end' : 'justify-start'} group`}
     >
       <ContextMenu>
-        <ContextMenuTrigger className="max-w-[70%]">
+        <ContextMenuTrigger className="max-w-[75%]">
           <div
-            className={`px-3 py-2 rounded-[18px] relative transition-transform active:scale-[0.98]
-              ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
+            className={`px-4 py-2.5 rounded-[22px] relative transition-all active:scale-[0.98]
+              ${isHighlighted ? 'ring-2 ring-purple-500/50 ring-offset-2 ring-offset-[#0f0f0f]' : ''}
               ${isEmojiOnly 
                 ? 'bg-transparent shadow-none' 
                 : isSent
-                  ? 'bg-gradient-to-br from-pink-500 to-fuchsia-500 text-white rounded-br-sm shadow-md'
-                  : 'bg-card text-foreground border border-border rounded-bl-sm shadow-sm'
+                  ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-br-sm shadow-lg shadow-purple-500/10'
+                  : 'bg-[#1e1e1e] text-zinc-100 border border-white/5 rounded-bl-sm shadow-sm'
               }`}
           >
             {renderContent()}
             
             {!isEmojiOnly && (
-              <div className={`flex items-center justify-end gap-1 mt-1 ${isSent ? 'text-white/70' : 'text-muted-foreground'}`}>
+              <div className={`flex items-center justify-end gap-1.5 mt-1 ${isSent ? 'text-white/60' : 'text-zinc-500'}`}>
                 {message.isEdited && <span className="text-[9px] italic mr-1">edited</span>}
-                <span className="text-[10px] font-medium">{message.timestamp}</span>
+                <span className="text-[10px] font-medium tracking-tight">{message.timestamp}</span>
                 {isSent && (
-                  <span className="text-[11px] ml-0.5">
+                  <span className="flex items-center ml-0.5">
                     {message.isQueued ? (
-                      <span title="Waiting to deliver — recipient is offline">🕐</span>
+                      <span className="text-[10px]">🕐</span>
+                    ) : message.status === 'read' ? (
+                      <CheckCheck size={12} className="text-white/90" />
                     ) : (
-                      message.status === 'read' ? '✓✓' : message.status === 'delivered' ? '✓✓' : '✓'
+                      <Check size={12} className="text-white/60" />
                     )}
                   </span>
                 )}
@@ -161,7 +163,7 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
                       onReact?.(emoji);
                       toast.success(`Reacted with ${emoji}`);
                     }}
-                    className="p-2 hover:bg-primary/20 rounded-md text-xl transition-colors"
+                    className="p-2 hover:bg-purple-500/20 rounded-md text-xl transition-colors"
                   >
                     {emoji}
                   </button>

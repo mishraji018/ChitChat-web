@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Zap, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/config/supabase';
 import { toast } from 'sonner';
 
 interface LoginScreenProps {
@@ -28,17 +28,17 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0b141a] p-4 font-sans">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 font-sans">
       <div className="w-full max-w-md space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="relative p-5 bg-[#1f2c33] rounded-[2.5rem] shadow-2xl">
-            <Zap className="h-14 w-14 text-[#00d4a0]" />
+        <div className="flex flex-col items-center space-y-6">
+          <div className="relative p-6 bg-primary rounded-[2.5rem] shadow-2xl shadow-primary/20 text-white">
+            <Zap className="h-16 w-16 fill-current" />
           </div>
-          <div className="text-center space-y-1">
-            <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-              ChitChat
+          <div className="text-center space-y-2">
+            <h1 className="text-5xl font-black tracking-tight text-foreground">
+              Blink
             </h1>
-            <p className="text-gray-400 font-medium">Simple. Secure. Real-time.</p>
+            <p className="text-muted-foreground font-semibold text-lg tracking-wide uppercase">Fast • Modern • Unique</p>
           </div>
         </div>
 
@@ -46,10 +46,10 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 h-14 bg-white text-[#1f2c33] font-semibold text-lg rounded-2xl shadow-xl hover:bg-gray-50 transition-all active:scale-[0.98] disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-3 h-16 bg-white text-foreground font-bold text-lg rounded-3xl shadow-xl shadow-foreground/5 hover:bg-secondary transition-all active:scale-[0.98] disabled:opacity-50 border border-border"
           >
             {loading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-[#00d4a0]" />
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             ) : (
               <>
                 <svg className="h-6 w-6" viewBox="0 0 24 24">
@@ -58,7 +58,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
-                Continue with Google
+                <span className="opacity-90">Continue with Google</span>
               </>
             )}
           </button>
