@@ -281,13 +281,40 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
   const handleStartChat = async (user: User) => {
     try {
-      const existing = chats.find((c: any) => c.user.id === user.id);
-      
-      if (existing) {
-        setSelectedChatId(existing.id);
+      // 1. Check local state first
+      const existingLocal = chats.find((c: any) => c.user.id === user.id);
+      if (existingLocal) {
+        setSelectedChatId(existingLocal.id);
+        setShowNewChat(false);
+        return;
+      }
+
+      // 2. Check database for existing chat between these two users
+      const { data: existingChat, error: fetchError } = await supabase
+        .from('chats')
+        .select('*')
+        .or(`and(participant1_id.eq.${currentUser.id},participant2_id.eq.${user.id}),and(participant1_id.eq.${user.id},participant2_id.eq.${currentUser.id})`)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+
+      if (existingChat) {
+        // Chat exists in DB but maybe not in local state yet
+        const newChat = {
+          id: existingChat.id,
+          user: user,
+          messages: [],
+          unreadCount: 0,
+          isPinned: false,
+          isMuted: false,
+          isArchived: false,
+          lastMessage: null
+        };
+        setChats((prev: any) => [newChat, ...prev]);
+        setSelectedChatId(existingChat.id);
       } else {
-        // Create new conversation in Supabase
-        const { data: newChatData, error } = await supabase
+        // 3. Create new conversation in Supabase
+        const { data: newChatData, error: insertError } = await supabase
           .from('chats')
           .insert({
             participant1_id: currentUser.id,
@@ -296,7 +323,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           .select()
           .single();
 
-        if (error) throw error;
+        if (insertError) throw insertError;
 
         if (newChatData) {
           const newChat = {
@@ -525,6 +552,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           <NewChatPanel
             onClose={() => setShowNewChat(false)}
             onStartChat={handleStartChat}
+            currentUser={currentUser}
             t={t}
           />
         )}

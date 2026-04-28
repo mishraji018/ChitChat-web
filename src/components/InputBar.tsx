@@ -1,17 +1,13 @@
-// Toast
 import { toast } from 'sonner';
-
-// Image compression utilities
 import { compressImage, generateVideoThumbnail } from '@/utils/imageCompressor';
-
-// Token manager
 import { getToken } from '@/utils/tokenManager';
-
 import { useState, useRef } from 'react';
 import { Send, Smile, Paperclip, Mic, Image, FileText, MapPin, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { ThemeType, User } from '@/types/chat';
+import { useAIReply } from '@/hooks/useAIReply';
+import { Loader2 } from 'lucide-react';
 
 interface InputBarProps {
   onSend: (text: string, type?: string, mediaData?: any) => void;
@@ -21,9 +17,10 @@ interface InputBarProps {
   disabled?: boolean;
   onTyping?: () => void;
   isRecipientOnline?: boolean;
+  messages?: any[];
 }
 
-const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, isRecipientOnline = true }: InputBarProps) => {
+const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, isRecipientOnline = true, messages = [] }: InputBarProps) => {
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
@@ -36,11 +33,14 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   const [activeUploadType, setActiveUploadType] = useState<string>('image');
 
+  const { suggestions: aiSuggestions, isLoading: aiLoading, getSuggestions, clearSuggestions } = useAIReply(currentUser.id);
+
   const handleSend = () => {
     if (!text.trim()) return;
     onSend(text.trim());
     setText('');
     setShowEmoji(false);
+    clearSuggestions();
     inputRef.current?.focus();
   };
 
@@ -129,23 +129,61 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
     { icon: MapPin, label: 'Location', color: 'text-destructive' },
   ];
 
-  const suggestions = [
-    { label: "😂 Funny", value: "Haha, that's so funny!" },
-    { label: "❤️ Sweet", value: "That's so sweet of you! ❤️" },
-    { label: "😎 Cool", value: "Sounds cool, let's do it! 😎" }
+  const suggestionCategories = [
+    { label: "😂 Funny", tone: "funny" },
+    { label: "❤️ Sweet", tone: "romantic" },
+    { label: "😎 Cool", tone: "cool" }
   ];
 
   return (
     <div className="relative bg-[#0f0f0f] border-t border-white/5 p-4">
-      {/* AI Suggestions Bar */}
-      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none">
-        {suggestions.map((s, i) => (
+      {/* AI Suggestion Bubbles Overlay */}
+      <AnimatePresence>
+        {aiSuggestions.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full left-0 right-0 p-4 pb-0 bg-gradient-to-t from-[#0f0f0f] to-transparent z-40"
+          >
+            <div className="flex flex-wrap gap-2 justify-center mb-4">
+              {aiSuggestions.map((s, i) => (
+                <motion.button
+                  key={i}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    setText(s);
+                    clearSuggestions();
+                  }}
+                  className="px-4 py-2 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-[13px] text-purple-100 hover:bg-purple-500/20 transition-all shadow-xl backdrop-blur-md"
+                >
+                  {s}
+                </motion.button>
+              ))}
+              <button 
+                onClick={clearSuggestions}
+                className="p-2 text-zinc-500 hover:text-zinc-300"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AI Category Chips */}
+      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none items-center">
+        <span className="text-[10px] uppercase tracking-wider text-zinc-600 font-bold mr-1">AI Reply:</span>
+        {suggestionCategories.map((s, i) => (
           <button
             key={i}
-            onClick={() => setText(s.value)}
-            className="whitespace-nowrap px-3 py-1 rounded-full bg-[#1a1a1a] border border-white/5 text-[12px] text-zinc-400 hover:text-purple-400 hover:border-purple-500/30 hover:bg-purple-500/5 transition-all duration-300"
+            disabled={aiLoading}
+            onClick={() => getSuggestions(messages, s.tone)}
+            className="whitespace-nowrap px-3 py-1.5 rounded-full bg-[#1a1a1a] border border-white/5 text-[12px] text-zinc-400 hover:text-purple-400 hover:border-purple-500/30 hover:bg-purple-500/5 transition-all duration-300 flex items-center gap-2"
           >
             {s.label}
+            {aiLoading && <Loader2 size={12} className="animate-spin text-purple-500" />}
           </button>
         ))}
       </div>

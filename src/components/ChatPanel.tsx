@@ -316,7 +316,7 @@ const ChatPanel = ({
             )}
           </AnimatePresence>
 
-          <InputBar onSend={handleSend} t={safeT} currentUser={currentUser} onTyping={handleTyping} disabled={isBlocked} isRecipientOnline={isContactOnline} />
+          <InputBar onSend={handleSend} t={safeT} currentUser={currentUser} onTyping={handleTyping} disabled={isBlocked} isRecipientOnline={isContactOnline} messages={messages} />
         </>
       )}
     </div>

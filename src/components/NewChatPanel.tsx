@@ -9,10 +9,11 @@ import { supabase } from '@/config/supabase';
 interface NewChatPanelProps {
   onClose: () => void;
   onStartChat: (user: User) => void;
+  currentUser: User;
   t?: any;
 }
 
-const NewChatPanel = ({ onClose, onStartChat, t }: NewChatPanelProps) => {
+const NewChatPanel = ({ onClose, onStartChat, currentUser, t }: NewChatPanelProps) => {
   const safeT = t || translations['English'];
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -22,23 +23,23 @@ const NewChatPanel = ({ onClose, onStartChat, t }: NewChatPanelProps) => {
     const fetchUsers = async () => {
       setLoading(true);
       try {
-        let query = supabase.from('users').select('*');
+        let queryBuilder = supabase.from('users').select('*').neq('id', (currentUser as any)?.id);
         
         if (searchQuery) {
-          query = query.or(`username.ilike.%${searchQuery}%,displayName.ilike.%${searchQuery}%`);
+          queryBuilder = queryBuilder.or(`username.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`);
         }
 
-        const { data, error } = await query.limit(20);
+        const { data, error } = await queryBuilder.limit(10);
         
         if (error) throw error;
 
         if (data) {
           setUsers(data.map((u: any) => ({
             id: u.id,
-            username: u.username || u.name?.toLowerCase().replace(' ', '_'),
-            displayName: u.displayName || u.name,
-            avatar: u.avatar_url || u.avatar,
-            avatarColor: '#ff4500',
+            username: u.username,
+            displayName: u.display_name || u.username || u.email.split('@')[0],
+            avatar: u.avatar_url,
+            avatarColor: '#8b5cf6',
             isOnline: u.is_online,
             lastSeen: u.last_seen ? new Date(u.last_seen).toLocaleTimeString() : '',
             status: u.bio || 'Available'

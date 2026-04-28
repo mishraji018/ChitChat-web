@@ -45,7 +45,12 @@ const App = () => {
           setShowUsernameScreen(true);
         } else {
           // Existing User
-          setCurrentUser(dbUser);
+          await supabase
+            .from('users')
+            .update({ is_online: true })
+            .eq('id', dbUser.id);
+            
+          setCurrentUser({ ...dbUser, is_online: true });
           setIsLoggedIn(true);
           setShowUsernameScreen(false);
         }
@@ -94,6 +99,12 @@ const App = () => {
   };
 
   const handleLogout = async () => {
+    if (currentUser) {
+      await supabase
+        .from('users')
+        .update({ is_online: false, last_seen: new Date().toISOString() })
+        .eq('id', currentUser.id);
+    }
     await supabase.auth.signOut();
     window.location.reload();
   };
