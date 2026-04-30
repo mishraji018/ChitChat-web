@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Pin, BellOff, Image, Mic, Video, FileText } from 'lucide-react';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import UserAvatar from './Avatar';
-import { Chat } from '@/types/chat';
+import { Chat } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/config/supabase';
 
@@ -39,7 +39,10 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: ChatListItemProp
 
   const getPreviewText = () => {
     if (!lastMsg) return 'No messages yet';
-    return lastMsg.content || (lastMsg.type !== 'text' ? lastMsg.type.charAt(0).toUpperCase() + lastMsg.type.slice(1) : '');
+    if (lastMsg.content) return lastMsg.content;
+    const type = lastMsg.type;
+    if (!type || type === 'text') return '';
+    return type.charAt(0).toUpperCase() + type.slice(1);
   };
 
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -87,8 +90,8 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: ChatListItemProp
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
               {isMyMessage && lastMsg && (
-                <span className={`text-[11px] shrink-0 font-bold ${lastMsg.status === 'read' ? 'text-purple-400' : 'text-zinc-600'}`}>
-                  {lastMsg.status === 'read' ? '✓✓' : '✓'}
+                <span className={`text-[11px] shrink-0 font-bold ${lastMsg.status === 'seen' ? 'text-cyan-400' : 'text-zinc-600'}`}>
+                  {lastMsg.status === 'seen' ? '✓✓' : '✓'}
                 </span>
               )}
               {renderMediaIcon()}
@@ -100,8 +103,8 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: ChatListItemProp
             
             {/* Badges */}
             <div className="shrink-0 ml-1 flex items-center gap-1">
-              {unreadCount > 0 && (
-                <span className={`${chat.isMuted ? 'bg-muted' : 'bg-primary'} text-white text-[10px] font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1.5 shadow-sm`}>
+              {unreadCount > 0 && !isActive && (
+                <span className="bg-orange-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
                   {unreadCount}
                 </span>
               )}

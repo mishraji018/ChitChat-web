@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '::',
-    port: 8080,
+    port: 5173,
     hmr: { overlay: false }
   },
   resolve: {

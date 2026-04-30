@@ -1,5 +1,5 @@
-import { Check, CheckCheck, FileText, MapPin, Mic, Play, Download, Reply, Forward, Copy, Star, Edit, Trash2, Smile } from 'lucide-react';
-import { Message, User } from '@/types/chat';
+import { FileText, MapPin, Mic, Play, Download, Reply, Forward, Copy, Star, Edit, Trash2, Smile } from 'lucide-react';
+import { Message, User } from '@/types';
 import { motion } from 'framer-motion';
 import {
   ContextMenu,
@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/context-menu";
 import { toast } from 'sonner';
 import { translations } from '@/i18n/translations';
+import { Loader2, AlertCircle } from 'lucide-react';
+
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+};
 
 interface MessageBubbleProps {
   message: Message;
@@ -40,11 +48,69 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
   };
 
   const renderContent = () => {
+    const isUploading = message.uploadStatus === 'uploading';
+    const isQueued = message.uploadStatus === 'queued';
+    const isError = message.uploadStatus === 'error';
+    const mediaUrl = message.mediaUrl || message.content;
+
+    const StatusOverlay = () => (
+      <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center rounded-xl backdrop-blur-[2px] z-10">
+        {isUploading && (
+          <>
+            <Loader2 size={24} className="animate-spin text-white mb-2" />
+            <span className="text-[10px] text-white font-bold uppercase tracking-wider">Uploading...</span>
+          </>
+        )}
+        {isQueued && (
+          <>
+            <span className="text-xl mb-1">🕐</span>
+            <span className="text-[10px] text-white font-bold text-center px-4">Waiting for connection...</span>
+          </>
+        )}
+        {isError && (
+          <>
+            <AlertCircle size={24} className="text-red-400 mb-2" />
+            <span className="text-[10px] text-white font-bold uppercase tracking-wider">Upload Failed</span>
+            <button className="mt-2 px-3 py-1 bg-white/20 hover:bg-white/30 rounded-full text-[9px] text-white transition-all">Retry</button>
+          </>
+        )}
+      </div>
+    );
+
     switch (message.type) {
       case 'image':
         return (
-          <div className="rounded-xl overflow-hidden max-w-[240px] -mx-1 -mt-1">
-            <img src={message.content} alt="Shared" className="w-full object-cover" />
+          <div className="rounded-xl overflow-hidden max-w-[240px] -mx-1 -mt-1 relative">
+            {(isUploading || isQueued || isError) && <StatusOverlay />}
+            <img 
+              src={mediaUrl} 
+              alt="Shared" 
+              className={`w-full object-cover cursor-pointer transition-all duration-500 ${isUploading || isQueued || isError ? 'blur-sm scale-110' : 'hover:scale-105'}`} 
+              onClick={() => !isUploading && !isQueued && window.open(mediaUrl, '_blank')}
+            />
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="rounded-xl overflow-hidden max-w-[240px] -mx-1 -mt-1 relative bg-black/20">
+            {(isUploading || isQueued || isError) && <StatusOverlay />}
+            <video 
+              src={mediaUrl}
+              controls={!isUploading && !isQueued}
+              className={`w-full rounded-xl ${isUploading || isQueued || isError ? 'blur-sm' : ''}`}
+              preload="metadata"
+            />
+          </div>
+        );
+      case 'audio':
+        return (
+          <div className="min-w-[200px] relative">
+            {(isUploading || isQueued || isError) && <StatusOverlay />}
+            <audio 
+              src={mediaUrl}
+              controls={!isUploading && !isQueued}
+              className={`w-full h-8 ${isUploading || isQueued || isError ? 'blur-sm' : ''}`}
+            />
           </div>
         );
       case 'location':
@@ -62,16 +128,25 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
       case 'sticker':
         return <span className="text-6xl block py-2">{message.content}</span>;
       case 'document':
+      case 'file':
         return (
-          <div className="flex items-center gap-3 bg-background/20 rounded-lg p-3 min-w-[200px]">
-            <div className="w-10 h-10 rounded-lg bg-destructive/20 flex items-center justify-center shrink-0">
-              <FileText size={20} className="text-destructive" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{message.fileName}</p>
-              <p className="text-xs opacity-70">{message.fileSize}</p>
-            </div>
-            <Download size={18} className="opacity-70 cursor-pointer hover:opacity-100 transition-opacity" />
+          <div className="relative">
+            {(isUploading || isQueued || isError) && <StatusOverlay />}
+            <a 
+              href={mediaUrl} 
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-3 bg-white/5 hover:bg-white/10 rounded-xl p-3 min-w-[220px] transition-all border border-white/5 ${isUploading || isQueued || isError ? 'blur-[1px]' : ''}`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-xl">
+                📄
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate text-zinc-100">{message.mediaName || message.fileName || 'Document'}</p>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tight">{formatFileSize(message.mediaSize || 0)}</p>
+              </div>
+              <Download size={18} className="text-zinc-400 shrink-0" />
+            </a>
           </div>
         );
       default:
@@ -110,12 +185,18 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
                 <span className="text-[10px] font-medium tracking-tight">{message.timestamp}</span>
                 {isSent && (
                   <span className="flex items-center ml-0.5">
-                    {message.isQueued ? (
-                      <span className="text-[10px]">🕐</span>
-                    ) : message.status === 'read' ? (
-                      <CheckCheck size={12} className="text-white/90" />
-                    ) : (
-                      <Check size={12} className="text-white/60" />
+                    {message.status === 'seen' && (
+                      <span className="text-[10px] text-white/40 font-medium">
+                        Seen {(() => {
+                          if (!message.createdAt) return 'just now';
+                          const diff = Math.floor((new Date().getTime() - new Date(message.createdAt).getTime()) / 60000);
+                          if (diff < 1) return 'just now';
+                          if (diff < 60) return `${diff}m ago`;
+                          const hrs = Math.floor(diff / 60);
+                          if (hrs < 24) return `${hrs}h ago`;
+                          return `${Math.floor(hrs / 24)}d ago`;
+                        })()}
+                      </span>
                     )}
                   </span>
                 )}

@@ -50,7 +50,17 @@ const App = () => {
             .update({ is_online: true })
             .eq('id', dbUser.id);
             
-          setCurrentUser({ ...dbUser, is_online: true });
+          setCurrentUser({
+            id: dbUser.id,
+            username: dbUser.username,
+            displayName: dbUser.display_name,
+            avatar: dbUser.avatar_url,
+            avatarColor: dbUser.avatar_color || '#3b82f6',
+            status: dbUser.bio || 'Available',
+            isOnline: true,
+            lastSeen: dbUser.last_seen,
+            email: dbUser.email
+          });
           setIsLoggedIn(true);
           setShowUsernameScreen(false);
         }
@@ -86,7 +96,17 @@ const App = () => {
 
       if (error) throw error;
 
-      setCurrentUser(data);
+      setCurrentUser({
+        id: data.id,
+        username: data.username,
+        displayName: data.display_name,
+        avatar: data.avatar_url,
+        avatarColor: data.avatar_color || '#3b82f6',
+        status: data.bio || 'Available',
+        isOnline: true,
+        lastSeen: data.last_seen,
+        email: data.email
+      });
       setIsLoggedIn(true);
       setShowUsernameScreen(false);
       toast.success(`Welcome to Blink, ${username}!`);

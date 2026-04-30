@@ -8,6 +8,7 @@ import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { ThemeType, User } from '@/types/chat';
 import { useAIReply } from '@/hooks/useAIReply';
 import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface InputBarProps {
   onSend: (text: string, type?: string, mediaData?: any) => void;
@@ -16,11 +17,15 @@ interface InputBarProps {
   currentUser: User;
   disabled?: boolean;
   onTyping?: () => void;
-  isRecipientOnline?: boolean;
   messages?: any[];
+  currentUserId: string;
+  onSendFile?: (file: File) => void;
+  isRecipientOnline?: boolean;
 }
 
-const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, isRecipientOnline = true, messages = [] }: InputBarProps) => {
+const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, isRecipientOnline = true, messages = [], currentUserId, onSendFile }: InputBarProps) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
@@ -33,9 +38,15 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
   const timerRef = useRef<ReturnType<typeof setInterval>>();
   const [activeUploadType, setActiveUploadType] = useState<string>('image');
 
-  const { suggestions: aiSuggestions, isLoading: aiLoading, getSuggestions, clearSuggestions } = useAIReply(currentUser.id);
+  const { suggestions: aiSuggestions, isLoading: aiLoading, activeTone, getSuggestions, clearSuggestions } = useAIReply();
 
   const handleSend = () => {
+    if (selectedFile) {
+      onSendFile?.(selectedFile);
+      setSelectedFile(null);
+      setFilePreview(null);
+      return;
+    }
     if (!text.trim()) return;
     onSend(text.trim());
     setText('');
@@ -44,57 +55,29 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
     inputRef.current?.focus();
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    try {
-      let fileToUpload = file;
-      let thumbnail = '';
-
-      if (file.type.startsWith('image/')) {
-        toast.info('Optimizing image...');
-        fileToUpload = await compressImage(file);
-      } else if (file.type.startsWith('video/')) {
-        toast.info('Generating thumbnail...');
-        thumbnail = await generateVideoThumbnail(file);
-      }
-
-      const sizeMB = (fileToUpload.size / 1024 / 1024).toFixed(2);
-      
-      const formData = new FormData();
-      formData.append('file', fileToUpload);
-
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const token = getToken();
-      
-      const res = await fetch(`${API_URL}/api/media/upload/${activeUploadType}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      });
-
-      const data = await res.json();
-
-      if (data.url) {
-        onSend(data.url, activeUploadType, {
-          fileName: file.name,
-          fileSize: `${sizeMB} MB`,
-          thumbnail: thumbnail || data.thumbnail,
-          ...data
-        });
-      }
-    } catch (err) {
-      toast.error('Upload failed. Try again.');
-      console.error(err);
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('File too large (max 50MB)');
+      return;
     }
+
+    setSelectedFile(file);
+    if (file.type.startsWith('image/')) {
+      setFilePreview(URL.createObjectURL(file));
+    } else {
+      setFilePreview(null);
+    }
+    setShowAttach(false);
+  };
+
+  const getFileSizeStatus = (size: number) => {
+    if (size < 1024 * 1024) return { text: 'Small file', color: 'text-green-400' };
+    if (size < 10 * 1024 * 1024) return { text: 'Medium file', color: 'text-yellow-400' };
+    if (size < 50 * 1024 * 1024) return { text: 'Large file — may take a moment', color: 'text-orange-400' };
+    return { text: 'File too large (max 50MB)', color: 'text-red-400' };
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -130,13 +113,47 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
   ];
 
   const suggestionCategories = [
-    { label: "😂 Funny", tone: "funny" },
-    { label: "❤️ Sweet", tone: "romantic" },
-    { label: "😎 Cool", tone: "cool" }
+    { label: "😂 Funny", tone: "funny and witty" },
+    { label: "❤️ Sweet", tone: "sweet and caring" },
+    { label: "😎 Cool", tone: "cool and casual" }
   ];
 
   return (
     <div className="relative bg-[#0f0f0f] border-t border-white/5 p-4">
+      {/* File Preview Overlay */}
+      <AnimatePresence>
+        {selectedFile && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full left-0 right-0 p-4 bg-[#1a1a1a] border-t border-white/5 z-50 flex items-center gap-4"
+          >
+            {filePreview ? (
+              <div className="w-16 h-16 rounded-lg overflow-hidden border border-white/10 shrink-0">
+                <img src={filePreview} alt="Preview" className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 shrink-0 text-2xl">
+                {selectedFile.type.startsWith('video/') ? '🎥' : selectedFile.type.startsWith('audio/') ? '🎵' : '📄'}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-zinc-100 truncate">{selectedFile.name}</p>
+              <p className={cn("text-xs mt-0.5 font-bold", getFileSizeStatus(selectedFile.size).color)}>
+                {getFileSizeStatus(selectedFile.size).text}
+              </p>
+            </div>
+            <button 
+              onClick={() => { setSelectedFile(null); setFilePreview(null); }}
+              className="p-2 text-zinc-500 hover:text-red-400 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* AI Suggestion Bubbles Overlay */}
       <AnimatePresence>
         {aiSuggestions.length > 0 && (
@@ -179,11 +196,11 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
           <button
             key={i}
             disabled={aiLoading}
-            onClick={() => getSuggestions(messages, s.tone)}
+            onClick={() => getSuggestions(messages, s.tone, currentUserId)}
             className="whitespace-nowrap px-3 py-1.5 rounded-full bg-[#1a1a1a] border border-white/5 text-[12px] text-zinc-400 hover:text-purple-400 hover:border-purple-500/30 hover:bg-purple-500/5 transition-all duration-300 flex items-center gap-2"
           >
             {s.label}
-            {aiLoading && <Loader2 size={12} className="animate-spin text-purple-500" />}
+            {aiLoading && activeTone === s.tone && <Loader2 size={12} className="animate-spin text-purple-500" />}
           </button>
         ))}
       </div>
@@ -206,8 +223,8 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
         type="file" 
         ref={fileInputRef} 
         className="hidden" 
-        onChange={handleFileUpload}
-        accept={activeUploadType === 'image' ? "image/*,video/*" : ".pdf,.doc,.docx,.xls,.xlsx,.txt"}
+        onChange={handleFileSelect}
+        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
       />
 
       {isRecording ? (
@@ -258,7 +275,7 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
             />
             <button
               disabled={disabled}
-              onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
+              onClick={() => fileInputRef.current?.click()}
               className="p-2.5 text-zinc-500 hover:text-purple-400 transition-colors shrink-0"
             >
               <Paperclip size={22} />
@@ -274,7 +291,7 @@ const InputBar = ({ onSend, currentTheme, t, currentUser, disabled, onTyping, is
               🌶️
             </button>
             
-            {text.trim() ? (
+            {text.trim() || selectedFile ? (
               <motion.button
                 initial={{ scale: 0, rotate: -45 }}
                 animate={{ scale: 1, rotate: 0 }}

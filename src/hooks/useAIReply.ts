@@ -1,65 +1,55 @@
 import { useState } from 'react';
 
-export const useAIReply = (currentUserId: string) => {
+export const useAIReply = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTone, setActiveTone] = useState<string | null>(null);
 
-  const getSuggestions = async (messages: any[], tone: string) => {
-    if (!messages || messages.length === 0) return;
-    
+  const getSuggestions = async (messages: any[], tone: string, currentUserId: string) => {
     setIsLoading(true);
+    setActiveTone(tone);
     try {
-      const lastMessages = messages.slice(-6).map(m => ({
-        role: m.senderId === currentUserId ? 'user' : 'assistant',
-        content: m.content || m.text
-      }));
+      const lastMessages = messages.slice(-6).map(m =>
+        `${m.senderId === currentUserId ? 'Me' : 'Them'}: ${m.content || m.text}`
+      ).join('\n');
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        console.error('Gemini API key is missing');
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are a chat assistant. Last 6 messages: 
-                ${JSON.stringify(lastMessages)}
-                
-                Give exactly 3 short ${tone} reply suggestions.
-                Reply in same language as conversation (Hindi/English/Hinglish).
-                Return ONLY a JSON array of strings: ["reply1", "reply2", "reply3"]`
-              }]
-            }]
-          })
-        }
-      );
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          max_tokens: 200,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a chat assistant. Give exactly 3 short ${tone} reply suggestions based on the conversation. Reply in the same language as the conversation (Hindi/English/Hinglish). Return ONLY a raw JSON array with no markdown, no explanation: ["reply1", "reply2", "reply3"]`
+            },
+            {
+              role: 'user',
+              content: `Here are the last messages:\n${lastMessages}\n\nGive 3 ${tone} reply suggestions as a JSON array only.`
+            }
+          ]
+        })
+      });
 
       const data = await response.json();
+      if (!data.choices || data.choices.length === 0) throw new Error('No suggestions returned');
       
-      if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
-        const text = data.candidates[0].content.parts[0].text;
-        const clean = text.replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(clean);
-        setSuggestions(Array.isArray(parsed) ? parsed : []);
-      } else {
-        throw new Error('Invalid response from Gemini');
-      }
+      const text = data.choices[0].message.content;
+      const clean = text.replace(/```json|```/g, '').trim();
+      setSuggestions(JSON.parse(clean));
     } catch (err) {
-      console.error('AI error:', err);
-      setSuggestions([]);
+      console.error('Groq AI Reply Error:', err);
+      setSuggestions(["Hey! 👋", "Sounds good!", "Tell me more"]);
     } finally {
       setIsLoading(false);
+      setActiveTone(null);
     }
   };
 
   const clearSuggestions = () => setSuggestions([]);
-
-  return { suggestions, isLoading, getSuggestions, clearSuggestions };
+  return { suggestions, isLoading, activeTone, getSuggestions, clearSuggestions };
 };

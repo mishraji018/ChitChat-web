@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/config/supabase';
+import { User as UserType } from '@/types';
 
 interface ProfilePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  user: any;
+  user: UserType;
   onSignOut: () => void;
 }
 
 const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) => {
-  const [bio, setBio] = useState(user?.bio || 'Available');
+  const [bio, setBio] = useState(user?.status || 'Available');
   const [isEditing, setIsEditing] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('blinkchat_theme') || 'dark');
 
@@ -71,15 +72,15 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
           <div className="flex flex-col items-center text-center space-y-4">
             <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-700 p-1 shadow-xl">
               <div className="w-full h-full rounded-[1.4rem] overflow-hidden bg-[#1a1a1a] flex items-center justify-center">
-                {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                {user?.avatar ? (
+                  <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-4xl font-bold text-white">{(user?.username || user?.email || '?')[0].toUpperCase()}</span>
+                  <span className="text-4xl font-bold text-white">{(user?.displayName || user?.username || user?.email || '?')[0].toUpperCase()}</span>
                 )}
               </div>
             </div>
             <div>
-              <h3 className="text-2xl font-black text-white tracking-tight">{user?.username || user?.display_name || 'User'}</h3>
+              <h3 className="text-2xl font-black text-white tracking-tight">{user?.displayName || user?.username || 'User'}</h3>
               <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
             </div>
           </div>

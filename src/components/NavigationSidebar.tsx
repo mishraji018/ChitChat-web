@@ -64,10 +64,10 @@ const NavigationSidebar = ({ currentUser, activeTab, onTabChange, onLogout }: Na
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shadow-lg shrink-0 uppercase"
             style={{ backgroundColor: currentUser.avatarColor || '#3b82f6' }}
           >
-            {(currentUser.name?.[0] || currentUser.username?.[0] || currentUser.email?.[0] || '?')}
+            {(currentUser.displayName?.[0] || currentUser.username?.[0] || currentUser.email?.[0] || '?')}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[12px] font-bold text-zinc-200 truncate">{currentUser.name || currentUser.username || 'User'}</span>
+            <span className="text-[12px] font-bold text-zinc-200 truncate">{currentUser.displayName || currentUser.username || 'User'}</span>
             <span className="text-[10px] text-zinc-500 truncate">{currentUser.email || 'Online'}</span>
           </div>
         </div>

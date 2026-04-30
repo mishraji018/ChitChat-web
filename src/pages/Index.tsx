@@ -12,10 +12,10 @@ import CameraModal from '@/components/CameraModal';
 import NewGroupModal from '@/components/NewGroupModal';
 import ContactInfoPanel from '@/components/ContactInfoPanel';
 import { DeleteChatModal, BlockUserModal, ReportUserModal } from '@/components/ConfirmationModals';
-import type { ThemeType } from '@/types/chat';
+import { AIAssistant } from '@/components/AIAssistant';
+import type { ThemeType, User, Message, MessageStatus } from '@/types';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { wallpapers } from '@/data/wallpapers';
-import { User, Message } from '@/types/chat';
 import { supabase } from '@/config/supabase';
 import { MessageSquare } from "lucide-react";
 import { toast } from '@/components/ui/use-toast';
@@ -45,7 +45,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             *,
             participant1:users!participant1_id(*),
             participant2:users!participant2_id(*),
-            messages:messages(text, created_at, seen)
+            messages:messages(text, created_at, seen, status)
           `)
           .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
           .order('created_at', { ascending: false });
@@ -76,12 +76,13 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               lastMessage: lastMsg ? {
                 text: lastMsg.text,
                 timestamp: new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                status: lastMsg.seen ? 'read' : 'sent'
+                status: lastMsg.seen ? 'seen' : 'sent'
               } : null,
               unreadCount: 0,
               isPinned: false,
               isMuted: false,
               isArchived: false,
+              lastMessageAt: lastMsg ? lastMsg.created_at : conv.created_at,
             };
           });
 
@@ -135,6 +136,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showReportConfirm, setShowReportConfirm] = useState(false);
+  const [showAI, setShowAI] = useState(false);
   const [activeTab, setActiveTab] = useState('messages');
 
   const [currentTheme, setCurrentTheme] = useState<ThemeType>(
@@ -153,7 +155,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     if (currentTheme === 'dark') root.classList.add('dark');
     else if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
     else if (currentTheme === 'rose') root.classList.add('theme-rose');
-    else root.classList.add('light');
+    else root.classList.add('theme-light');
     localStorage.setItem('blinkchat_theme', currentTheme);
   }, [currentTheme]);
 
@@ -188,21 +190,26 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             const updatedChats = [...prev];
             const chat = { ...updatedChats[chatIndex] };
             
-            // Map message to frontend format
             const mappedMsg: Message = {
               id: newMessage.id,
               senderId: newMessage.sender_id,
               receiverId: newMessage.receiver_id || currentUser.id,
               content: newMessage.text,
               type: newMessage.type || 'text',
+              mediaUrl: newMessage.media_url,
+              mediaType: newMessage.media_type,
+              mediaSize: newMessage.media_size,
+              mediaName: newMessage.media_name,
+              uploadStatus: newMessage.upload_status || 'done',
               timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              status: newMessage.seen ? 'read' : 'sent'
+              status: (newMessage.seen ? 'seen' : 'sent') as MessageStatus
             };
 
-            // Only add if not already there (duplicate check)
             if (!chat.messages.some((m: any) => m.id === mappedMsg.id)) {
               chat.messages = [...chat.messages, mappedMsg];
               chat.lastMessage = mappedMsg;
+              chat.lastMessageAt = newMessage.created_at;
+              // Only increment unread count if NOT currently in this chat
               if (selectedChatId !== chat.id) {
                 chat.unreadCount = (chat.unreadCount || 0) + 1;
               }
@@ -214,12 +221,42 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           return prev;
         });
       })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages'
+      }, (payload) => {
+        const updatedMsg = payload.new;
+        setChats((prev: any) => prev.map((c: any) => {
+          if (c.id === updatedMsg.chat_id) {
+            const updatedMessages = c.messages.map((m: any) => 
+              m.id === updatedMsg.id ? { ...m, ...updatedMsg, status: (updatedMsg.status || (updatedMsg.seen ? 'seen' : 'sent')) as MessageStatus } : m
+            );
+            const lastMsg = updatedMessages[updatedMessages.length - 1];
+            return { 
+              ...c, 
+              messages: updatedMessages, 
+              lastMessage: lastMsg
+            };
+          }
+          return c;
+        }));
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser?.id, selectedChatId]);
+  }, [currentUser?.id, selectedChatId]); // Added selectedChatId to correctly gate unread increments
+
+  // Reset unread count when opening a chat
+  useEffect(() => {
+    if (selectedChatId) {
+      setChats((prev: any) => prev.map((c: any) => 
+        c.id === selectedChatId ? { ...c, unreadCount: 0 } : c
+      ));
+    }
+  }, [selectedChatId]);
 
   // Sync online status
   useEffect(() => {
@@ -256,8 +293,13 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             text: m.text,
             content: m.text,
             type: m.type || 'text',
+            mediaUrl: m.media_url,
+            mediaType: m.media_type,
+            mediaSize: m.media_size,
+            mediaName: m.media_name,
+            uploadStatus: m.upload_status || 'done',
             timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.seen ? 'read' : 'sent'
+            status: m.seen ? 'seen' : 'sent'
           }));
 
           setChats((prev: any) => prev.map((c: any) => 
@@ -267,9 +309,10 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           // Mark as read
           await supabase
             .from('messages')
-            .update({ seen: true })
+            .update({ status: 'seen', seen: true })
             .eq('chat_id', selectedChatId)
-            .neq('sender_id', currentUser.id);
+            .neq('sender_id', currentUser.id)
+            .or('status.neq.seen,status.is.null');
         }
       } catch (err) {
         console.error('Failed to fetch messages:', err);
@@ -308,7 +351,8 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           isPinned: false,
           isMuted: false,
           isArchived: false,
-          lastMessage: null
+          lastMessage: null,
+          lastMessageAt: existingChat.created_at
         };
         setChats((prev: any) => [newChat, ...prev]);
         setSelectedChatId(existingChat.id);
@@ -334,7 +378,8 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             isPinned: false,
             isMuted: false,
             isArchived: false,
-            lastMessage: null
+            lastMessage: null,
+            lastMessageAt: newChatData.created_at
           };
           setChats((prev: any) => [newChat, ...prev]);
           setSelectedChatId(newChat.id);
@@ -371,18 +416,18 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   };
 
   const handleBlockUser = async (chatId: string) => {
-    toast.success('User blocked (Locally)');
+    toast({ title: 'User blocked (Locally)' });
     setShowBlockConfirm(false);
   };
 
   const handleReportUser = async (chatId: string) => {
-    toast.success('User reported (Locally)');
+    toast({ title: 'User reported (Locally)' });
     setShowReportConfirm(false);
   };
 
   const handleReact = async (chatId: string, messageId: string, emoji: string) => {
     // React logic would go here via Supabase (e.g. a 'reactions' table)
-    toast.info('Reaction added locally');
+    toast({ title: 'Reaction added locally' });
   };
 
   const archivedChats = chats.filter((c: any) => c.isArchived);
@@ -393,9 +438,9 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const sortedChats = [...displayChats].sort((a: any, b: any) => {
     if (a.isPinned && !b.isPinned) return -1;
     if (!a.isPinned && b.isPinned) return 1;
-    const timeA = a.lastMessage?.timestamp || '00:00';
-    const timeB = b.lastMessage?.timestamp || '00:00';
-    return timeB.localeCompare(timeA);
+    const timeA = new Date(a.lastMessageAt || 0).getTime();
+    const timeB = new Date(b.lastMessageAt || 0).getTime();
+    return timeB - timeA;
   });
 
   const selectedChat = chats.find((c: any) => c.id === selectedChatId) || null;
@@ -408,6 +453,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     >
       <Header 
         onOpenSettings={() => setShowSettings(true)}
+        onOpenAI={() => setShowAI(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -430,38 +476,11 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 currentTheme={currentTheme}
                 t={t}
                 onSendMessage={async (chatId, msg) => {
-                  try {
-                    const { data, error } = await supabase
-                      .from('messages')
-                      .insert({
-                        chat_id: chatId,
-                        sender_id: currentUser.id,
-                        text: msg.content,
-                        type: msg.type
-                      })
-                      .select()
-                      .single();
-
-                    if (error) throw error;
-
-                    if (data) {
-                      const mappedMsg: Message = {
-                        id: data.id,
-                        senderId: data.sender_id,
-                        receiverId: data.receiver_id || '',
-                        content: data.text,
-                        type: data.type || 'text',
-                        timestamp: new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                        status: 'sent'
-                      };
-                      
-                      setChats((prev: any) => prev.map((c: any) => 
-                        c.id === chatId ? { ...c, messages: [...c.messages, mappedMsg], lastMessage: mappedMsg } : c
-                      ));
-                    }
-                  } catch (err) {
-                    console.error('Send message failed:', err);
-                  }
+                  // ChatPanel now handles Supabase insertion via useMessages.
+                  // We only need to update the lastMessage in our local chats list for the sidebar.
+                  setChats((prev: any) => prev.map((c: any) => 
+                    c.id === chatId ? { ...c, lastMessage: msg, lastMessageAt: new Date().toISOString() } : c
+                  ));
                 }}
                 onOpenInfo={() => setShowContactInfo(true)}
                 showSearch={showChatSearch}
@@ -603,6 +622,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             onOpenSearch={() => setShowChatSearch(true)}
             onMessageClick={() => setShowContactInfo(false)}
             onDeleteConversation={handleDeleteConversation}
+          />
+        )}
+        {showAI && (
+          <AIAssistant 
+            isOpen={showAI} 
+            onClose={() => setShowAI(false)} 
           />
         )}
       </AnimatePresence>

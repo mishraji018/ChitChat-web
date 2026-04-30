@@ -2,37 +2,40 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/config/supabase';
 
 export const usePresence = (currentUserId: string | null) => {
-  const [onlineUsers, setOnlineUsers] = useState<Record<string, any>>({});
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!currentUserId) return;
 
-    const channel = supabase.channel('online-users', {
+    const channel = supabase.channel('realtime:online-users', {
       config: {
         presence: {
           key: currentUserId,
         },
       },
-    });
-
-    channel
+    })
       .on('presence', { event: 'sync' }, () => {
-        setOnlineUsers(channel.presenceState());
+        const state = channel.presenceState();
+        const onlineIds = new Set(Object.keys(state));
+        console.log('[usePresence] Online users synced:', Array.from(onlineIds));
+        setOnlineUsers(onlineIds);
       })
-      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        setOnlineUsers(prev => ({ ...prev, [key]: newPresences }));
+      .on('presence', { event: 'join' }, ({ key }) => {
+        console.log('[usePresence] User joined:', key);
+        setOnlineUsers(prev => new Set(prev).add(key));
       })
-      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        console.log('[usePresence] User left:', key);
         setOnlineUsers(prev => {
-          const newState = { ...prev };
-          delete newState[key];
-          return newState;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
         });
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          console.log('[usePresence] Subscribed, tracking user:', currentUserId);
           await channel.track({
-            is_online: true,
             online_at: new Date().toISOString(),
           });
         }
@@ -43,9 +46,7 @@ export const usePresence = (currentUserId: string | null) => {
     };
   }, [currentUserId]);
 
-  const isOnline = (userId: string) => {
-    return !!onlineUsers[userId];
-  };
+  const isOnline = (userId: string) => onlineUsers.has(userId);
 
-  return { isOnline, onlineUsers };
+  return { isOnline, onlineUsers: Array.from(onlineUsers) };
 };

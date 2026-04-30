@@ -1,18 +1,19 @@
-import { Search, Bell, Settings, Sparkles, Plus } from 'lucide-react';
+import { Search, Bell, Settings, Sparkles, Zap } from 'lucide-react';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
   onOpenSettings?: () => void;
   onOpenNotifications?: () => void;
+  onOpenAI?: () => void;
 }
 
-const Header = ({ onSearch, onOpenSettings, onOpenNotifications }: HeaderProps) => {
+const Header = ({ onSearch, onOpenSettings, onOpenNotifications, onOpenAI }: HeaderProps) => {
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md flex items-center justify-between px-6 z-50 shrink-0">
       {/* Logo Section */}
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
-          <Plus size={20} strokeWidth={3} />
+        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white shadow-lg shadow-primary/20">
+          <Zap size={18} fill="currentColor" strokeWidth={2.5} />
         </div>
         <span className="text-xl font-bold tracking-tight text-foreground">Blink</span>
       </div>
@@ -32,7 +33,10 @@ const Header = ({ onSearch, onOpenSettings, onOpenNotifications }: HeaderProps) 
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <button className="flex items-center gap-2 bg-accent px-4 py-1.5 rounded-full text-accent-foreground text-sm font-medium hover:bg-primary/10 transition-colors">
+        <button 
+          onClick={onOpenAI}
+          className="flex items-center gap-2 bg-accent px-4 py-1.5 rounded-full text-accent-foreground text-sm font-medium hover:bg-primary/10 transition-colors"
+        >
           <Sparkles size={16} />
           <span>Ask AI</span>
           <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-full text-primary font-bold">Beta</span>

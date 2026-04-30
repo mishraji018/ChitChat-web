@@ -1,5 +1,5 @@
-export type MessageType = 'text' | 'image' | 'document' | 'voice' | 'video' | 'location' | 'sticker';
-export type MessageStatus = 'sent' | 'delivered' | 'read';
+export type MessageType = 'text' | 'image' | 'document' | 'voice' | 'video' | 'audio' | 'file' | 'location' | 'sticker';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen' | 'queued' | 'error';
 export type ThemeType = 'dark' | 'deep-blue' | 'light' | 'rose';
 
 export interface User {
@@ -22,6 +22,7 @@ export interface Message {
   type: MessageType;
   content: string;
   timestamp: string;
+  createdAt?: string;
   status: MessageStatus;
   isQueued?: boolean;
   replyTo?: string;
@@ -31,6 +32,11 @@ export interface Message {
   isDeleted?: boolean;
   fileName?: string;
   fileSize?: string;
+  mediaUrl?: string;
+  mediaType?: string;
+  mediaSize?: number;
+  mediaName?: string;
+  uploadStatus?: 'uploading' | 'queued' | 'done' | 'error';
   duration?: string;
   mediaData?: {
     address?: string;

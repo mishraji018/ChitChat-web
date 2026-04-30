@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
+import { supabase } from '@/config/supabase';
 import { ArrowLeft, Search, MoreVertical, ChevronDown, BellOff, User, UserPlus, Image as Wallpaper, Archive, Pin, Trash2, Ban, Flag, ChevronUp, X as CloseIcon } from 'lucide-react';
-import { Chat, Message, ThemeType, User as UserType } from '@/types/chat';
+import { Chat, Message, ThemeType, MessageStatus, User as UserType } from '@/types';
 import UserAvatar from './Avatar';
 import MessageBubble from './MessageBubble';
 import InputBar from './InputBar';
@@ -12,7 +13,16 @@ import { apiFetch } from '@/utils/tokenManager';
 import { useMessages } from '@/hooks/useMessages';
 import { usePresence } from '@/hooks/usePresence';
 import { useTyping } from '@/hooks/useTyping';
-import { toast } from '@/components/ui/use-toast';
+import { useStreak } from '@/hooks/useStreak';
+import { MemoryCapsuleCreation } from './MemoryCapsule';
+import { MemoryCapsuleList } from './MemoryCapsuleList';
+import { useBoringDetector } from '@/hooks/useBoringDetector';
+import { useOfflineQueue } from '@/hooks/useOfflineQueue';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { useIndexedDB } from '@/hooks/useIndexedDB';
+import { toast } from 'sonner';
+import { toast as shadcnToast } from '@/components/ui/use-toast';
 
 interface ChatPanelProps {
   chat: Chat | null;
@@ -83,14 +93,98 @@ const ChatPanel = ({
   const [searchResults, setSearchResults] = useState<number[]>([]);
   
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const topObserverRef = useRef<HTMLDivElement>(null);
 
   // Hooks for Supabase logic
-  const { messages, sendMessage, loading: messagesLoading, setMessages } = useMessages(chat?.id || null);
+  const { messages, sendMessage, markAsRead, loading: messagesLoading, setMessages } = useMessages(chat?.id || null);
   const { isOnline: checkIsOnline } = usePresence(currentUser.id);
   const { isTyping: isRecipientTyping, handleTyping } = useTyping(chat?.id || null, currentUser.id);
+  const { streak, updateStreak, justBroken } = useStreak(currentUser.id, chat?.user.id || '');
+  const { checkIfBoring } = useBoringDetector();
+  const lastCheckedCount = useRef(0);
+  const { addToQueue, getQueue } = useOfflineQueue();
+  const { isOnline, wasOffline } = useNetworkStatus();
+  const { uploadFile, getFileCategory } = useFileUpload();
+  const { saveToIndexedDB } = useIndexedDB();
+  
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  useEffect(() => {
+    if (chat?.id) {
+      scrollToBottom('auto');
+    }
+  }, [chat?.id]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom('smooth');
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (chat?.id && currentUser?.id) {
+      markAsRead(chat.id, currentUser.id);
+    }
+  }, [chat?.id, currentUser.id]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.senderId !== currentUser.id && chat?.id) {
+        markAsRead(chat.id, currentUser.id);
+      }
+    }
+  }, [messages.length, chat?.id, currentUser.id]);
+
+  useEffect(() => {
+    if (justBroken) {
+      shadcnToast({ title: "💔 Streak ended!", description: "Start a new one?", variant: "destructive" });
+    }
+  }, [justBroken]);
+
+  useEffect(() => {
+    const runBoringDetection = async () => {
+      if (messages.length > 0 && messages.length % 10 === 0 && messages.length !== lastCheckedCount.current) {
+        lastCheckedCount.current = messages.length;
+        const result = await checkIfBoring(messages, currentUser.id);
+        if (result && result.boringScore > 65) {
+          toast.custom((id) => (
+            <div className="w-[350px] bg-gradient-to-br from-[#1a0b2e] to-[#0a0a0a] border border-purple-500/30 p-5 rounded-2xl shadow-2xl backdrop-blur-xl">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl">{result.emoji}</div>
+                  <div className="flex-1">
+                    <p className="text-zinc-100 font-medium text-sm">😴 Chat feels a bit quiet...</p>
+                    <p className="text-purple-300 text-xs mt-1 italic">{result.suggestion}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => toast.dismiss(id)}
+                    className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold rounded-lg transition-all"
+                  >
+                    Let's try it! 🙌
+                  </button>
+                  <button 
+                    onClick={() => toast.dismiss(id)}
+                    className="flex-1 py-2 bg-white/5 hover:bg-white/10 text-zinc-400 text-[11px] font-medium rounded-lg transition-all"
+                  >
+                    We're fine 😅
+                  </button>
+                </div>
+              </div>
+            </div>
+          ), { duration: 8000, position: 'bottom-center' });
+        }
+      }
+    };
+    runBoringDetection();
+  }, [messages.length, currentUser.id, checkIfBoring]);
 
   const isContactOnline = chat ? checkIsOnline(chat.user.id) : false;
   const contactLastSeen = chat?.user.lastSeen || '';
@@ -113,19 +207,149 @@ const ChatPanel = ({
       content,
       mediaData,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sent',
+      status: (isOnline ? 'sending' : 'queued') as MessageStatus,
     };
 
     // Optimistic Update
     setMessages(prev => [...prev, newMsg]);
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+
+    if (!isOnline) {
+      addToQueue({
+        id: tempId,
+        chatId: chat.id,
+        senderId: currentUser.id,
+        text: content,
+        createdAt: new Date().toISOString()
+      });
+      return;
+    }
 
     try {
-      await sendMessage(content, currentUser.id, chat.id, type, mediaData);
+      await sendMessage(content, currentUser.id, chat.id, type, mediaData, tempId);
+      await updateStreak();
+      
+      setMessages(prev => prev.map(m => 
+        m.id === tempId ? { ...m, status: 'sent' as MessageStatus } : m
+      ));
+      
       if (onSendMessage) onSendMessage(chat.id, newMsg);
     } catch (err) {
       console.error('Error sending message:', err);
-      toast.error('Failed to send message');
+      // Supabase failed even though online — queue it
+      addToQueue({
+        id: tempId,
+        chatId: chat.id,
+        senderId: currentUser.id,
+        text: content,
+        createdAt: new Date().toISOString()
+      });
+      setMessages(prev => prev.map(m => 
+        m.id === tempId ? { ...m, status: 'queued' as MessageStatus } : m
+      ));
+    }
+  };
+
+  const handleFileSend = async (file: File) => {
+    if (!chat || !currentUser) return;
+
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (file.size > maxSize) {
+      shadcnToast({ title: "File too large", description: "Maximum size is 50MB", variant: "destructive" });
+      return;
+    }
+
+    const tempId = uuidv4();
+    const isSmall = file.size < 1 * 1024 * 1024; // under 1MB
+
+    // Show message immediately with uploading status
+    const localUrl = URL.createObjectURL(file);
+    const newMsg: Message = {
+      id: tempId,
+      senderId: currentUser.id,
+      receiverId: chat.user.id,
+      type: getFileCategory(file) as any,
+      content: '',
+      mediaUrl: localUrl,
+      mediaType: getFileCategory(file),
+      mediaName: file.name,
+      mediaSize: file.size,
+      uploadStatus: isOnline ? 'uploading' : 'queued',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: (isOnline ? 'sending' : 'queued') as MessageStatus,
+    };
+
+    setMessages(prev => [...prev, newMsg]);
+
+    if (!isOnline) {
+      if (isSmall) {
+        // Save file blob to IndexedDB for later upload
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await saveToIndexedDB({
+            id: tempId,
+            chatId: chat.id,
+            senderId: currentUser.id,
+            fileData: reader.result,
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            createdAt: new Date().toISOString()
+          });
+        };
+        reader.readAsArrayBuffer(file);
+
+        shadcnToast({ 
+          title: "📵 Offline", 
+          description: "File saved — will upload when connected" 
+        });
+      } else {
+        // Large file offline → cannot queue
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        shadcnToast({ 
+          title: "Cannot send large file offline",
+          description: "Connect to internet and try again",
+          variant: "destructive"
+        });
+      }
+      return;
+    }
+
+    // Online — upload to Supabase Storage
+    try {
+      const result = await uploadFile(file, chat.id, currentUser.id);
+
+      // Save message to Supabase with media URL
+      await supabase.from('messages').insert({
+        id: tempId,
+        chat_id: chat.id,
+        sender_id: currentUser.id,
+        text: '',
+        media_url: result.url,
+        media_type: result.type,
+        media_name: result.name,
+        media_size: result.size,
+        upload_status: 'done',
+        seen: false
+      });
+
+      setMessages(prev => prev.map(m =>
+        m.id === tempId 
+          ? { ...m, mediaUrl: result.url, uploadStatus: 'done', status: 'sent' as MessageStatus } 
+          : m
+      ));
+
+    } catch (err) {
+      console.error('Upload failed:', err);
+      setMessages(prev => prev.map(m =>
+        m.id === tempId 
+          ? { ...m, uploadStatus: 'error' } 
+          : m
+      ));
+      shadcnToast({ 
+        title: "Upload failed", 
+        description: "Please try again later",
+        variant: "destructive"
+      });
     }
   };
 
@@ -181,7 +405,18 @@ const ChatPanel = ({
               <div className="relative cursor-pointer group flex items-center gap-3" onClick={onOpenInfo}>
                 <UserAvatar name={nickname || chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isContactOnline} className="w-10 h-10" />
                 <div className="flex flex-col min-w-0">
-                  <h3 className="font-bold text-[15px] text-zinc-100 truncate tracking-tight">{nickname || chat.user.displayName}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-[15px] text-zinc-100 truncate tracking-tight">{nickname || chat.user.displayName}</h3>
+                    {streak >= 2 && (
+                      <span className={`text-sm font-bold flex items-center gap-1 ${
+                        streak >= 30 ? 'text-yellow-400 animate-pulse' : 
+                        streak >= 7 ? 'text-yellow-400' : 
+                        'text-orange-400'
+                      }`}>
+                        {streak >= 30 ? '🔥🔥🔥' : streak >= 7 ? '🔥🔥' : '🔥'} {streak}
+                      </span>
+                    )}
+                  </div>
                   <span className={`text-[11px] font-medium ${isRecipientTyping ? 'text-purple-400' : 'text-zinc-500'}`}>
                     {isRecipientTyping ? 'typing...' : isContactOnline ? 'Online' : contactLastSeen ? `Last seen ${contactLastSeen}` : 'Offline'}
                   </span>
@@ -190,6 +425,8 @@ const ChatPanel = ({
             </div>
 
             <div className="flex items-center gap-1">
+              <MemoryCapsuleCreation chatId={chat.id} currentUserId={currentUser.id} />
+              <MemoryCapsuleList chatId={chat.id} />
               <button onClick={onOpenSearch} className="p-2 text-zinc-500 hover:text-purple-400 hover:bg-white/5 rounded-xl transition-all">
                 <Search size={20} />
               </button>
@@ -275,6 +512,23 @@ const ChatPanel = ({
 
           {/* Messages */}
           <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 chat-pattern scrollbar-thin messages-area z-10">
+            {!isOnline && (
+              <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-xs text-center py-2 px-4 rounded-lg mx-4 mt-2 mb-4">
+                📵 You're offline — messages will send when you reconnect
+                {getQueue().length > 0 && (
+                  <div className="text-[10px] opacity-80 mt-1">
+                    {getQueue().length} message(s) waiting to send
+                  </div>
+                )}
+              </div>
+            )}
+
+            {wasOffline && isOnline && (
+              <div className="bg-green-500/20 border border-green-500/30 text-green-400 text-xs text-center py-2 px-4 rounded-lg mx-4 mt-2 mb-4 animate-pulse">
+                ✅ Back online! Sending queued messages...
+              </div>
+            )}
+
             <div ref={topObserverRef} className="h-4 flex items-center justify-center mb-4">
               {messagesLoading && <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />}
             </div>
@@ -302,6 +556,7 @@ const ChatPanel = ({
             )}
             
             {isRecipientTyping && <TypingIndicator />}
+            <div ref={messagesEndRef} />
             <div ref={bottomRef} />
           </div>
 
@@ -316,7 +571,7 @@ const ChatPanel = ({
             )}
           </AnimatePresence>
 
-          <InputBar onSend={handleSend} t={safeT} currentUser={currentUser} onTyping={handleTyping} disabled={isBlocked} isRecipientOnline={isContactOnline} messages={messages} />
+          <InputBar onSend={handleSend} t={safeT} currentUser={currentUser} onTyping={handleTyping} onSendFile={handleFileSend} isRecipientOnline={isContactOnline} messages={messages} currentUserId={currentUser.id} />
         </>
       )}
     </div>
