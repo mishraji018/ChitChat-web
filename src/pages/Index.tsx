@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Phone, Users } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useIsMobile } from '@/hooks/use-mobile';
+import BottomNav, { MobileTab } from '@/components/BottomNav';
 import ChatListSidebar from '@/components/ChatListSidebar';
 import ChatPanel from '@/components/ChatPanel';
 import ProfilePanel from '@/components/ProfilePanel';
@@ -30,6 +32,8 @@ interface IndexProps {
 }
 
 const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguageChange }: IndexProps) => {
+  const isMobile = useIsMobile();
+  const [mobileTab, setMobileTab] = useState<MobileTab>('chats');
   const [chats, setChats] = useState(() => {
     const saved = localStorage.getItem('blinkchat_conversations');
     return saved ? JSON.parse(saved) : [];
@@ -138,6 +142,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const [showReportConfirm, setShowReportConfirm] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [activeTab, setActiveTab] = useState('messages');
+  const [globalSearch, setGlobalSearch] = useState('');
 
   const [currentTheme, setCurrentTheme] = useState<ThemeType>(
     () => (localStorage.getItem('blinkchat_theme') as ThemeType) || 'light'
@@ -454,77 +459,179 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       <Header 
         onOpenSettings={() => setShowSettings(true)}
         onOpenAI={() => setShowAI(true)}
+        onSearch={setGlobalSearch}
       />
 
       <div className="flex flex-1 overflow-hidden">
-        <NavigationSidebar
-          currentUser={currentUser}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          onLogout={onLogout}
-        />
+        {!isMobile && (
+          <NavigationSidebar
+            currentUser={currentUser}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            onLogout={onLogout}
+          />
+        )}
 
         <div className="flex-1 h-full flex overflow-hidden relative">
-          {/* Main Chat Panel */}
-          <div className="flex-1 h-full bg-chat relative overflow-hidden">
-            {selectedChatId ? (
-              <ChatPanel
-                key={selectedChatId || 'none'}
-                chat={selectedChat}
-                currentUser={currentUser}
-                onBack={() => setSelectedChatId(null)}
-                currentTheme={currentTheme}
-                t={t}
-                onSendMessage={async (chatId, msg) => {
-                  // ChatPanel now handles Supabase insertion via useMessages.
-                  // We only need to update the lastMessage in our local chats list for the sidebar.
-                  setChats((prev: any) => prev.map((c: any) => 
-                    c.id === chatId ? { ...c, lastMessage: msg, lastMessageAt: new Date().toISOString() } : c
-                  ));
-                }}
-                onOpenInfo={() => setShowContactInfo(true)}
-                showSearch={showChatSearch}
-                onOpenSearch={() => setShowChatSearch(true)}
-                onCloseSearch={() => setShowChatSearch(false)}
-                onToggleMute={handleToggleMute}
-                onTogglePin={handleTogglePin}
-                onToggleArchive={handleToggleArchive}
-                onDeleteChat={() => setShowDeleteConfirm(true)}
-                onToggleBlock={() => setShowBlockConfirm(true)}
-                onReportChat={() => setShowReportConfirm(true)}
-                onOpenWallpaper={() => setShowWallpaperPicker(true)}
-                onAddToGroup={() => {}}
-                onReact={handleReact}
-              />
-            ) : (
-              <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[#0f0f0f]">
-                <div className="w-24 h-24 rounded-[32px] bg-purple-500/5 flex items-center justify-center mb-6 border border-purple-500/10">
-                  <MessageSquare size={48} className="text-purple-500/40" />
-                </div>
-                <h1 className="text-3xl font-bold text-zinc-100 mb-4 tracking-tight">Select a friend to start chatting</h1>
-                <p className="max-w-md text-zinc-500 text-sm leading-relaxed">
-                  Choose a conversation from the list or start a new one to begin your secure, encrypted messaging experience.
-                </p>
+          {isMobile ? (
+            <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0f0f0f]">
+              {selectedChatId ? (
+                <ChatPanel
+                  key={selectedChatId}
+                  chat={selectedChat}
+                  currentUser={currentUser}
+                  onBack={() => setSelectedChatId(null)}
+                  currentTheme={currentTheme}
+                  t={t}
+                  onSendMessage={async (chatId, msg) => {
+                    setChats((prev: any) => prev.map((c: any) => 
+                      c.id === chatId ? { ...c, lastMessage: msg, lastMessageAt: new Date().toISOString() } : c
+                    ));
+                  }}
+                  onOpenInfo={() => setShowContactInfo(true)}
+                  showSearch={showChatSearch}
+                  onOpenSearch={() => setShowChatSearch(true)}
+                  onCloseSearch={() => setShowChatSearch(false)}
+                  onToggleMute={handleToggleMute}
+                  onTogglePin={handleTogglePin}
+                  onToggleArchive={handleToggleArchive}
+                  onDeleteChat={() => setShowDeleteConfirm(true)}
+                  onToggleBlock={() => setShowBlockConfirm(true)}
+                  onReportChat={() => setShowReportConfirm(true)}
+                  onOpenWallpaper={() => setShowWallpaperPicker(true)}
+                  onAddToGroup={() => {}}
+                  onReact={handleReact}
+                />
+              ) : (
+                <>
+                  <div className="flex-1 overflow-hidden relative">
+                    {mobileTab === 'chats' && (
+                      <ChatListSidebar
+                        chats={sortedChats}
+                        selectedChatId={selectedChatId}
+                        onSelectChat={setSelectedChatId}
+                        onOpenProfile={() => setMobileTab('profile')}
+                        onNewChat={() => setShowNewChat(true)}
+                        onOpenNewGroup={() => setShowNewGroup(true)}
+                        onLogout={onLogout}
+                        onOpenSettings={() => setShowSettings(true)}
+                        t={t}
+                        currentUser={currentUser}
+                        globalSearch={globalSearch}
+                      />
+                    )}
+                    {mobileTab === 'calls' && (
+                      <div className="h-full flex flex-col items-center justify-center text-zinc-500 p-8 text-center">
+                        <div className="w-20 h-20 rounded-full bg-purple-500/5 flex items-center justify-center mb-6">
+                          <Phone size={32} className="text-purple-500/20" />
+                        </div>
+                        <h2 className="text-xl font-bold text-zinc-100 mb-2">Calls</h2>
+                        <p className="text-sm text-zinc-500 max-w-[240px]">Audio and video calling is coming soon to Blink.</p>
+                      </div>
+                    )}
+                    {mobileTab === 'groups' && (
+                      <div className="h-full flex flex-col items-center justify-center text-zinc-500 p-8 text-center">
+                        <div className="w-20 h-20 rounded-full bg-purple-500/5 flex items-center justify-center mb-6">
+                          <Users size={32} className="text-purple-500/20" />
+                        </div>
+                        <h2 className="text-xl font-bold text-zinc-100 mb-2">Groups</h2>
+                        <p className="text-sm text-zinc-500 max-w-[240px]">Create communities and group chats with your friends.</p>
+                        <button onClick={() => setShowNewGroup(true)} className="mt-6 px-6 py-2 bg-purple-600 text-white rounded-xl font-bold text-sm">Create Group</button>
+                      </div>
+                    )}
+                    {mobileTab === 'profile' && (
+                      <div className="h-full bg-[#0f0f0f] overflow-y-auto">
+                        <div className="px-6 py-8 flex flex-col items-center">
+                          <div className="w-24 h-24 rounded-[32px] bg-purple-500/10 flex items-center justify-center mb-6 border border-purple-500/20 text-3xl font-bold text-purple-400">
+                            {currentUser.displayName[0]}
+                          </div>
+                          <h2 className="text-2xl font-bold text-zinc-100">{currentUser.displayName}</h2>
+                          <p className="text-zinc-500">@{currentUser.username}</p>
+                          
+                          <div className="w-full mt-10 space-y-3">
+                            <button onClick={() => setShowProfile(true)} className="w-full p-4 rounded-2xl bg-[#1a1a1a] border border-white/5 flex items-center justify-between group">
+                              <span className="font-bold text-zinc-200">Edit Profile</span>
+                              <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><Users size={16} className="text-zinc-500" /></div>
+                            </button>
+                            <button onClick={() => setShowSettings(true)} className="w-full p-4 rounded-2xl bg-[#1a1a1a] border border-white/5 flex items-center justify-between">
+                              <span className="font-bold text-zinc-200">Settings</span>
+                              <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center"><MessageSquare size={16} className="text-zinc-500" /></div>
+                            </button>
+                            <button onClick={onLogout} className="w-full p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-between">
+                              <span className="font-bold text-red-400">Sign Out</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <BottomNav activeTab={mobileTab} onTabChange={setMobileTab} />
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Main Chat Panel */}
+              <div className="flex-1 h-full bg-chat relative overflow-hidden">
+                {selectedChatId ? (
+                  <ChatPanel
+                    key={selectedChatId || 'none'}
+                    chat={selectedChat}
+                    currentUser={currentUser}
+                    onBack={() => setSelectedChatId(null)}
+                    currentTheme={currentTheme}
+                    t={t}
+                    onSendMessage={async (chatId, msg) => {
+                      setChats((prev: any) => prev.map((c: any) => 
+                        c.id === chatId ? { ...c, lastMessage: msg, lastMessageAt: new Date().toISOString() } : c
+                      ));
+                    }}
+                    onOpenInfo={() => setShowContactInfo(true)}
+                    showSearch={showChatSearch}
+                    onOpenSearch={() => setShowChatSearch(true)}
+                    onCloseSearch={() => setShowChatSearch(false)}
+                    onToggleMute={handleToggleMute}
+                    onTogglePin={handleTogglePin}
+                    onToggleArchive={handleToggleArchive}
+                    onDeleteChat={() => setShowDeleteConfirm(true)}
+                    onToggleBlock={() => setShowBlockConfirm(true)}
+                    onReportChat={() => setShowReportConfirm(true)}
+                    onOpenWallpaper={() => setShowWallpaperPicker(true)}
+                    onAddToGroup={() => {}}
+                    onReact={handleReact}
+                  />
+                ) : (
+                  <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[#0f0f0f]">
+                    <div className="w-24 h-24 rounded-[32px] bg-purple-500/5 flex items-center justify-center mb-6 border border-purple-500/10">
+                      <MessageSquare size={48} className="text-purple-500/40" />
+                    </div>
+                    <h1 className="text-3xl font-bold text-zinc-100 mb-4 tracking-tight">Select a friend to start chatting</h1>
+                    <p className="max-w-md text-zinc-500 text-sm leading-relaxed">
+                      Choose a conversation from the list or start a new one to begin your secure, encrypted messaging experience.
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Right Sidebar - Chat List */}
-          <div className="w-[340px] border-l border-border bg-white h-full relative shrink-0">
-            <ChatListSidebar
-              chats={sortedChats}
-              selectedChatId={selectedChatId}
-              onSelectChat={setSelectedChatId}
-              onOpenProfile={() => setShowProfile(true)}
-              onNewChat={() => setShowNewChat(true)}
-              onOpenNewGroup={() => setShowNewGroup(true)}
-              onLogout={onLogout}
-              onOpenSettings={() => setShowSettings(true)}
-              t={t}
-              currentUser={currentUser}
-              activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
-            />
-          </div>
+              {/* Right Sidebar - Chat List */}
+              <div className="w-[340px] border-l border-border bg-white h-full relative shrink-0">
+                <ChatListSidebar
+                  chats={sortedChats}
+                  selectedChatId={selectedChatId}
+                  onSelectChat={setSelectedChatId}
+                  onOpenProfile={() => setShowProfile(true)}
+                  onNewChat={() => setShowNewChat(true)}
+                  onOpenNewGroup={() => setShowNewGroup(true)}
+                  onLogout={onLogout}
+                  onOpenSettings={() => setShowSettings(true)}
+                  t={t}
+                  currentUser={currentUser}
+                  activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
+                  globalSearch={globalSearch}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 

@@ -21,6 +21,7 @@ export interface Message {
   receiverId: string;
   type: MessageType;
   content: string;
+  text?: string;
   timestamp: string;
   createdAt?: string;
   status: MessageStatus;
@@ -56,4 +57,6 @@ export interface Chat {
   isMuted: boolean;
   isArchived: boolean;
   isTyping?: boolean;
+  lastMessageAt?: string | number;
+  updatedAt?: string | number;
 }

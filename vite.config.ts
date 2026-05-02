@@ -8,7 +8,11 @@ export default defineConfig({
   server: {
     host: '::',
     port: 5173,
-    hmr: { overlay: false }
+    hmr: { 
+      overlay: false,
+      protocol: 'ws',    // ← add this
+      timeout: 5000      // ← add this
+    }
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') }

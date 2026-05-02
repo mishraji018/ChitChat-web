@@ -1,98 +1,101 @@
-import { useState, useEffect, useRef } from 'react';
+/**
+ * FILE: useMessages.ts
+ * PURPOSE: Handles fetching, sending, and real-time syncing of messages
+ * HOOKS USED: useState, useEffect, useRef
+ * SUPABASE TABLES: messages
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/config/supabase';
 import { Message, MessageStatus } from '@/types';
 
 export const useMessages = (chatId: string | null) => {
+  // ─── [1-10] State & Refs ──────────────────
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<any>(null);
 
-  useEffect(() => {
-    if (!chatId) {
-      setMessages([]);
-      return;
-    }
+  const mapMsg = useCallback((m: any): Message => ({
+    id: m.id,
+    senderId: m.sender_id,
+    receiverId: m.receiver_id,
+    content: m.text,
+    type: m.type || 'text',
+    mediaData: m.media_data,
+    mediaUrl: m.media_url,
+    mediaType: m.media_type,
+    mediaSize: m.media_size,
+    mediaName: m.media_name,
+    uploadStatus: m.upload_status || 'done',
+    timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    createdAt: m.created_at,
+    status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus
+  }), []);
 
-    const fetchMessages = async () => {
-      setLoading(true);
-      console.log(`[useMessages] Fetching messages for chatId: ${chatId}`);
+  const fetchMessages = useCallback(async () => {
+    if (!chatId) return;
+    setLoading(true);
+    
+    // Safety timeout: if loading takes more than 5s, stop spinner
+    const timeoutId = setTimeout(() => setLoading(false), 5000);
+    
+    try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
-
+      
       if (error) {
-        console.error('[useMessages] Error fetching messages:', error);
+        console.log('[useMessages] fetch error:', error);
+        console.error('[useMessages] Fetch error:', error);
       } else {
-        const mapped = data.map(m => ({
-          id: m.id,
-          senderId: m.sender_id,
-          receiverId: m.receiver_id,
-          content: m.text,
-          type: m.type || 'text',
-          mediaData: m.media_data,
-          mediaUrl: m.media_url,
-          mediaType: m.media_type,
-          mediaSize: m.media_size,
-          mediaName: m.media_name,
-          uploadStatus: m.upload_status || 'done',
-          timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          createdAt: m.created_at,
-          status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus
-        }));
-        setMessages(mapped);
+        setMessages(data?.map(mapMsg) || []);
       }
+    } catch (err) {
+      console.error('[useMessages] unexpected error:', err);
+    } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
-    };
+    }
+  }, [chatId, mapMsg]);
 
+  // ─── [11-50] Effect: Initial Fetch ────────
+  useEffect(() => {
+    if (!chatId) {
+      setMessages([]);
+      return;
+    }
     fetchMessages();
+  }, [chatId, fetchMessages]);
 
-    // Cleanup existing subscription if any
+  // ─── [51-100] Effect: Realtime Sub ────────
+  useEffect(() => {
+    if (!chatId) return;
+
+    // Clear old channel
     if (channelRef.current) {
-      console.log(`[useMessages] Removing existing channel for ${chatId}`);
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
 
-    // Subscribe to real-time changes
-    console.log(`[useMessages] Setting up realtime subscription for chatId: ${chatId}`);
-    
-    channelRef.current = supabase.channel(`chat_messages:${chatId}`)
+    // Set up subscription
+    channelRef.current = supabase
+      .channel(`messages_${chatId}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'messages', 
         filter: `chat_id=eq.${chatId}` 
-      }, (payload) => {
-        const newMessage = payload.new;
-        if (!newMessage) return;
-
-        const mapped: Message = {
-          id: newMessage.id,
-          senderId: newMessage.sender_id,
-          receiverId: newMessage.receiver_id,
-          content: newMessage.text,
-          type: newMessage.type || 'text',
-          mediaData: newMessage.media_data,
-          mediaUrl: newMessage.media_url,
-          mediaType: newMessage.media_type,
-          mediaSize: newMessage.media_size,
-          mediaName: newMessage.media_name,
-          uploadStatus: newMessage.upload_status || 'done',
-          timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          createdAt: newMessage.created_at,
-          status: (newMessage.status === 'seen' || newMessage.seen ? 'seen' : 'sent') as MessageStatus
-        };
-
+      }, (p) => {
+        console.log('[REALTIME] INSERT received:', p.new);
+        if (!p.new) return;
+        const newMessage = p.new;
+        if (!newMessage.text && !newMessage.media_url) return;
+        const mapped = mapMsg(newMessage);
         setMessages(prev => {
-          const index = prev.findIndex(m => m.id === mapped.id);
-          if (index > -1) {
-            const updated = [...prev];
-            updated[index] = { ...updated[index], ...mapped };
-            return updated;
-          }
-          return [...prev, mapped];
+          const exists = prev.some(m => m.id === mapped.id);
+          return exists ? prev : [...prev, mapped];
         });
       })
       .on('postgres_changes', { 
@@ -100,14 +103,16 @@ export const useMessages = (chatId: string | null) => {
         schema: 'public', 
         table: 'messages', 
         filter: `chat_id=eq.${chatId}` 
-      }, (payload) => {
-        const updated = payload.new;
-        setMessages(prev => prev.map(m => 
-          m.id === updated.id ? { ...m, ...updated, status: (updated.status || (updated.seen ? 'seen' : 'sent')) as MessageStatus } : m
-        ));
+      }, (p) => {
+        const up = p.new;
+        setMessages(prev => prev.map(m => m.id === up.id ? { 
+          ...m, 
+          ...up, 
+          status: (up.status || (up.seen ? 'seen' : 'sent')) as MessageStatus 
+        } : m));
       })
       .subscribe((status) => {
-        console.log(`[useMessages] Realtime status for ${chatId}: ${status}`);
+        console.log(`[REALTIME] Status for ${chatId}:`, status);
       });
 
     return () => {
@@ -116,41 +121,40 @@ export const useMessages = (chatId: string | null) => {
         channelRef.current = null;
       }
     };
-  }, [chatId]);
+  }, [chatId, mapMsg]);
 
-  const sendMessage = async (text: string, senderId: string, chatId: string, type: string = 'text', mediaData: any = null, messageId?: string) => {
+  // ─── [101-160] Event Handlers ───────────────
+  const sendMessage = async (text: string, sId: string, cId: string, type: string = 'text', mData: any = null, mId?: string) => {
+    if (type === 'text' && (!text || !text.trim())) return;
+
+    const payload = {
+      id: mId,
+      chat_id: cId,
+      sender_id: sId,
+      text: text.trim(),
+      type,
+      media_data: mData,
+      status: 'sent',
+      seen: false,
+      created_at: new Date().toISOString()
+    };
+
     try {
-      const { data, error } = await supabase.from('messages').insert({
-        id: messageId,
-        chat_id: chatId,
-        sender_id: senderId,
-        text: text,
-        type: type,
-        media_data: mediaData,
-        status: 'sent',
-        seen: false
-      }).select().single();
-
+      const { data, error } = await supabase.from('messages').insert(payload).select().single();
       if (error) throw error;
       return data;
     } catch (err) {
-      console.error('[useMessages] SendMessage error:', err);
+      console.error('[useMessages] Send error:', err);
       throw err;
     }
   };
 
-  const markAsRead = async (chatId: string, currentUserId: string) => {
+  const markAsRead = async (cId: string, uId: string) => {
     try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ status: 'seen', seen: true })
-        .eq('chat_id', chatId)
-        .neq('sender_id', currentUserId)
-        .or('status.neq.seen,status.is.null');
-
+      const { error } = await supabase.from('messages').update({ status: 'seen', seen: true }).eq('chat_id', cId).neq('sender_id', uId).or('status.neq.seen,status.is.null');
       if (error) throw error;
     } catch (err) {
-      console.error('[useMessages] markAsRead error:', err);
+      console.error('[useMessages] Read error:', err);
     }
   };
 

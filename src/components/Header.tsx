@@ -33,14 +33,6 @@ const Header = ({ onSearch, onOpenSettings, onOpenNotifications, onOpenAI }: Hea
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        <button 
-          onClick={onOpenAI}
-          className="flex items-center gap-2 bg-accent px-4 py-1.5 rounded-full text-accent-foreground text-sm font-medium hover:bg-primary/10 transition-colors"
-        >
-          <Sparkles size={16} />
-          <span>Ask AI</span>
-          <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-full text-primary font-bold">Beta</span>
-        </button>
         
         <div className="w-px h-6 bg-border mx-1" />
 
