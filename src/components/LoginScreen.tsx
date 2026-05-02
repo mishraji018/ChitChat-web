@@ -17,7 +17,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: 'http://localhost:5173'
+          redirectTo: import.meta.env.VITE_APP_URL || window.location.origin
         }
       });
       if (error) throw error;
