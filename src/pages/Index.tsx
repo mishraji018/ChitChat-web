@@ -144,6 +144,36 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const [activeTab, setActiveTab] = useState('messages');
   const [globalSearch, setGlobalSearch] = useState('');
 
+  // Handle back navigation for mobile
+  const handleSelectChat = (chatId: string) => {
+    setSelectedChatId(chatId);
+    window.history.pushState({ chatId }, '', `#chat`);
+  };
+
+  const handleBack = () => {
+    setSelectedChatId(null);
+    window.history.back();
+  };
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (!e.state?.chatId) {
+        setSelectedChatId(null);
+      } else {
+        setSelectedChatId(e.state.chatId);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Clear OAuth hash on initial load
+  useEffect(() => {
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
   const [currentTheme, setCurrentTheme] = useState<ThemeType>(
     () => (localStorage.getItem('blinkchat_theme') as ThemeType) || 'light'
   );
@@ -332,7 +362,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       // 1. Check local state first
       const existingLocal = chats.find((c: any) => c.user.id === user.id);
       if (existingLocal) {
-        setSelectedChatId(existingLocal.id);
+        handleSelectChat(existingLocal.id);
         setShowNewChat(false);
         return;
       }
@@ -360,7 +390,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           lastMessageAt: existingChat.created_at
         };
         setChats((prev: any) => [newChat, ...prev]);
-        setSelectedChatId(existingChat.id);
+        handleSelectChat(existingChat.id);
       } else {
         // 3. Create new conversation in Supabase
         const { data: newChatData, error: insertError } = await supabase
@@ -387,7 +417,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             lastMessageAt: newChatData.created_at
           };
           setChats((prev: any) => [newChat, ...prev]);
-          setSelectedChatId(newChat.id);
+          handleSelectChat(newChat.id);
         }
       }
     } catch (err) {
@@ -413,7 +443,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       await supabase.from('chats').delete().eq('id', chatId);
       setChats((prev: any) => prev.filter((c: any) => c.id !== chatId));
       if (selectedChatId === chatId) {
-        setSelectedChatId(null);
+        handleBack();
         setShowContactInfo(false);
       }
     } catch (err) { console.error(err); }
@@ -480,7 +510,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   key={selectedChatId}
                   chat={selectedChat}
                   currentUser={currentUser}
-                  onBack={() => setSelectedChatId(null)}
+                  onBack={handleBack}
                   currentTheme={currentTheme}
                   t={t}
                   onSendMessage={async (chatId, msg) => {
@@ -509,7 +539,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                       <ChatListSidebar
                         chats={sortedChats}
                         selectedChatId={selectedChatId}
-                        onSelectChat={setSelectedChatId}
+                        onSelectChat={handleSelectChat}
                         onOpenProfile={() => setMobileTab('profile')}
                         onNewChat={() => setShowNewChat(true)}
                         onOpenNewGroup={() => setShowNewGroup(true)}
@@ -578,7 +608,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     key={selectedChatId || 'none'}
                     chat={selectedChat}
                     currentUser={currentUser}
-                    onBack={() => setSelectedChatId(null)}
+                    onBack={handleBack}
                     currentTheme={currentTheme}
                     t={t}
                     onSendMessage={async (chatId, msg) => {
@@ -618,7 +648,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 <ChatListSidebar
                   chats={sortedChats}
                   selectedChatId={selectedChatId}
-                  onSelectChat={setSelectedChatId}
+                  onSelectChat={handleSelectChat}
                   onOpenProfile={() => setShowProfile(true)}
                   onNewChat={() => setShowNewChat(true)}
                   onOpenNewGroup={() => setShowNewGroup(true)}
@@ -713,7 +743,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 isArchived: false,
               };
               setChats((prev: any) => [newChat, ...prev]);
-              setSelectedChatId(newChat.id);
+              handleSelectChat(newChat.id);
               setShowNewGroup(false);
             }}
           />
