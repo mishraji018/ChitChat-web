@@ -10,8 +10,10 @@ export default defineConfig({
     port: 5173,
     hmr: { 
       overlay: false,
-      protocol: 'ws',    // ← add this
-      timeout: 5000      // ← add this
+      protocol: 'ws',
+      timeout: 5000,
+      // Add this:
+      preserveState: true
     }
   },
   resolve: {

@@ -24,6 +24,7 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
   // ─── [1-15] Helpers ───────────────────────
   const safeT = t || translations['English'];
   const mContent = message.content || (message as any).text || '';
+  console.log('[bubble] status:', message.status, 'isSent:', isSent);
 
   if (!mContent && !message.mediaUrl) return null;
 
@@ -73,15 +74,13 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
               <div className={`flex items-center justify-end gap-1.5 mt-1 ${isSent ? 'text-white/60' : 'text-zinc-500'}`}>
                 {message.isEdited && <span className="text-[9px] italic mr-1">edited</span>}
                 <span className="text-[10px] font-medium">{message.timestamp}</span>
-                {isSent && message.status === 'seen' && (
-                  <span className="text-[10px] text-white/40 font-medium ml-1">Seen {(() => {
-                    if (!message.createdAt) return 'just now';
-                    const diff = Math.floor((Date.now() - new Date(message.createdAt).getTime()) / 60000);
-                    if (diff < 1) return 'just now';
-                    if (diff < 60) return `${diff}m ago`;
-                    const h = Math.floor(diff / 60);
-                    return h < 24 ? `${h}h ago` : `${Math.floor(h/24)}d ago`;
-                  })()}</span>
+                {isSent && (
+                  <span className="text-[10px] ml-1">
+                    {message.status === 'seen' 
+                      ? <span className="text-cyan-400 font-bold">✓✓</span>
+                      : <span className="text-white/40 font-bold">✓</span>
+                    }
+                  </span>
                 )}
               </div>
             )}

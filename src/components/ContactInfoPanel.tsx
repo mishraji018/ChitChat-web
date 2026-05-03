@@ -2,9 +2,10 @@ import { X, MessageSquare, Phone, Video, Search, FileText, Download, Edit2, Chec
 import UserAvatar from './Avatar';
 import { User, Message, Chat } from '@/types/chat';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { toast } from 'sonner';
+import { supabase } from '@/config/supabase';
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,73 @@ const ContactInfoPanel = ({
     setIsEditingNickname(false);
     toast.success('Nickname updated');
   };
+
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '';
+    try {
+      return new Date(dateStr).toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'long', year: 'numeric'
+      });
+    } catch (e) { return dateStr; }
+  };
+
+  // Real-time user updates (About/Bio/Online status)
+  const [contactUser, setContactUser] = useState<User>(user);
+
+  useEffect(() => {
+    setContactUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user.id) return;
+
+    const channel = supabase.channel(`user_updates_${user.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'users',
+        filter: `id=eq.${user.id}`
+      }, (payload) => {
+        const updated = payload.new;
+        setContactUser(prev => ({
+          ...prev,
+          displayName: updated.display_name || updated.name || prev.displayName,
+          username: updated.username || prev.username,
+          status: updated.status || prev.status,
+          avatar: updated.avatar_url || prev.avatar,
+          lastSeen: updated.last_seen || prev.lastSeen
+        }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user.id]);
+
+  // Fetch all media and documents from Supabase
+  const [mediaList, setMediaList] = useState<any[]>([]);
+  const [docsList, setDocsList] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchSharedContent = async () => {
+      if (!chat.id) return;
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('media_url, media_type, media_name, media_size, created_at, text, type')
+        .eq('chat_id', chat.id)
+        .not('media_url', 'is', null)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setMediaList(data.filter(m => m.media_type?.startsWith('image') || m.type === 'image'));
+        setDocsList(data.filter(m => m.media_type === 'document' || m.type === 'document' || m.type === 'file'));
+      }
+    };
+
+    fetchSharedContent();
+  }, [chat.id]);
 
   // Filter messages for this conversation only
   const conversationMessages = useMemo(() => 
@@ -99,8 +167,8 @@ const ContactInfoPanel = ({
           {/* Profile Section */}
             <div className="flex flex-col items-center w-full">
               <div className="relative">
-                <UserAvatar name={user.displayName} color={user.avatarColor} size="2xl" />
-                {user.isOnline && (
+                <UserAvatar name={contactUser.displayName} color={contactUser.avatarColor} size="2xl" />
+                {contactUser.isOnline && (
                   <span className="absolute bottom-1 right-1 w-6 h-6 bg-online rounded-full border-4 border-card" />
                 )}
               </div>
@@ -129,15 +197,15 @@ const ContactInfoPanel = ({
                 ) : (
                   <>
                     <h2 className="text-xl font-bold text-foreground text-center px-4">{nickname}</h2>
-                    {nickname !== user.displayName && (
-                      <p className="text-xs text-muted-foreground mt-0.5">({user.displayName})</p>
+                    {nickname !== contactUser.displayName && (
+                      <p className="text-xs text-muted-foreground mt-0.5">({contactUser.displayName})</p>
                     )}
                   </>
                 )}
               </div>
               
-              <p className="text-sm text-muted-foreground mt-1">@{user.username}</p>
-              <p className="text-sm text-primary mt-1 font-medium">{user.isOnline ? 'Online' : user.lastSeen || 'Last seen recently'}</p>
+              <p className="text-sm text-muted-foreground mt-1">@{contactUser.username}</p>
+              <p className="text-sm text-primary mt-1 font-medium">{contactUser.isOnline ? 'Online' : formatDate(contactUser.lastSeen) || 'Last seen recently'}</p>
             </div>
 
           {/* Action Buttons Row */}
@@ -165,24 +233,24 @@ const ContactInfoPanel = ({
           {/* Bio / About */}
           <div className="px-4 py-6 border-b border-border">
             <p className="text-xs text-primary font-bold uppercase tracking-widest mb-2 font-display">About</p>
-            <p className="text-sm text-foreground leading-relaxed">{user.status || 'Hey there! I am using BlinkChat'}</p>
+            <p className="text-sm text-foreground leading-relaxed">{contactUser.status || 'Hey there! I am using BlinkChat'}</p>
           </div>
 
           {/* Shared Media Section */}
           <div className="px-4 py-6 border-b border-border">
             <div className="flex justify-between items-center mb-4">
               <p className="text-xs text-primary font-bold uppercase tracking-widest font-display">Media, Links & Docs</p>
-              {sharedMedia.length > 0 && (
+              {mediaList.length > 0 && (
                 <button onClick={() => setShowAllMedia(true)} className="text-xs text-primary hover:underline font-semibold">See All</button>
               )}
             </div>
             <div className="grid grid-cols-3 gap-1.5">
-              {sharedMedia.slice(0, 6).map((media, i) => (
+              {mediaList.slice(0, 6).map((media, i) => (
                 <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity">
-                  <img src={media.url} alt={`Shared ${i}`} className="w-full h-full object-cover" />
+                  <img src={media.media_url} alt={`Shared ${i}`} className="w-full h-full object-cover" />
                 </div>
               ))}
-              {sharedMedia.length === 0 && (
+              {mediaList.length === 0 && (
                 <p className="col-span-3 text-sm text-muted-foreground text-center py-4 italic">No media shared yet</p>
               )}
             </div>
@@ -192,21 +260,21 @@ const ContactInfoPanel = ({
           <div className="px-4 py-6 border-b border-border">
             <p className="text-xs text-primary font-bold uppercase tracking-widest mb-4 font-display">Shared Documents</p>
             <div className="space-y-3">
-              {sharedDocs.map((doc, i) => (
+              {docsList.map((doc, i) => (
                 <div key={i} className="flex items-center gap-3 py-1 group cursor-pointer">
                   <div className="w-10 h-10 rounded-xl bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
                     <FileText size={18} className="text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate text-foreground">{doc.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{doc.size} • {doc.date}</p>
+                    <p className="text-sm font-semibold truncate text-foreground">{doc.media_name || 'Document'}</p>
+                    <p className="text-[11px] text-muted-foreground">{doc.media_size ? `${(doc.media_size / 1024).toFixed(1)} KB` : 'Unknown size'} • {formatDate(doc.created_at)}</p>
                   </div>
-                  <button className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all">
+                  <a href={doc.media_url} download target="_blank" rel="noreferrer" className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all">
                     <Download size={16} />
-                  </button>
+                  </a>
                 </div>
               ))}
-              {sharedDocs.length === 0 && (
+              {docsList.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-2 italic">No documents shared</p>
               )}
             </div>
@@ -221,11 +289,11 @@ const ContactInfoPanel = ({
           <DialogHeader>
             <DialogTitle>Shared Media</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto p-1 scrollbar-thin">
-            {sharedMedia.map((media, i) => (
+          <div className="grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto p-1 scrollbar-thin">
+            {mediaList.map((media, i) => (
               <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 group transition-all">
                 <img 
-                  src={media.url} 
+                  src={media.media_url} 
                   alt={`Shared ${i}`}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                 />

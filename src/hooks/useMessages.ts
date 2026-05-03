@@ -46,11 +46,14 @@ export const useMessages = (chatId: string | null) => {
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
       
+      console.log('[fetch] data:', data, 'error:', error);
       if (error) {
-        console.log('[useMessages] fetch error:', error);
         console.error('[useMessages] Fetch error:', error);
       } else {
-        setMessages(data?.map(mapMsg) || []);
+        const mapped = data?.map(mapMsg) || [];
+        setMessages(mapped);
+        // Cache messages for this chat
+        sessionStorage.setItem(`messages_${chatId}`, JSON.stringify(mapped));
       }
     } catch (err) {
       console.error('[useMessages] unexpected error:', err);
@@ -66,6 +69,18 @@ export const useMessages = (chatId: string | null) => {
       setMessages([]);
       return;
     }
+
+    // 1. Load from cache first for instant display
+    const cached = sessionStorage.getItem(`messages_${chatId}`);
+    if (cached) {
+      try {
+        setMessages(JSON.parse(cached));
+      } catch (e) {
+        console.error('[useMessages] Cache parse error:', e);
+      }
+    }
+
+    // 2. Then fetch fresh from server
     fetchMessages();
   }, [chatId, fetchMessages]);
 
@@ -95,7 +110,9 @@ export const useMessages = (chatId: string | null) => {
         const mapped = mapMsg(newMessage);
         setMessages(prev => {
           const exists = prev.some(m => m.id === mapped.id);
-          return exists ? prev : [...prev, mapped];
+          const next = exists ? prev : [...prev, mapped];
+          sessionStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
+          return next;
         });
       })
       .on('postgres_changes', { 
@@ -104,15 +121,28 @@ export const useMessages = (chatId: string | null) => {
         table: 'messages', 
         filter: `chat_id=eq.${chatId}` 
       }, (p) => {
+        console.log('[REALTIME UPDATE]', p.new.id, p.new.status);
         const up = p.new;
-        setMessages(prev => prev.map(m => m.id === up.id ? { 
-          ...m, 
-          ...up, 
-          status: (up.status || (up.seen ? 'seen' : 'sent')) as MessageStatus 
-        } : m));
+        setMessages(prev => {
+          const next = prev.map(m => m.id === up.id ? { 
+            ...m, 
+            status: up.status as MessageStatus,
+            seen: up.seen 
+          } : m);
+          sessionStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
+          return next;
+        });
       })
       .subscribe((status) => {
         console.log(`[REALTIME] Status for ${chatId}:`, status);
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          // Retry after 2 seconds
+          setTimeout(() => {
+            if (channelRef.current) {
+              channelRef.current.subscribe();
+            }
+          }, 2000);
+        }
       });
 
     return () => {
@@ -127,7 +157,7 @@ export const useMessages = (chatId: string | null) => {
   const sendMessage = async (text: string, sId: string, cId: string, type: string = 'text', mData: any = null, mId?: string) => {
     if (type === 'text' && (!text || !text.trim())) return;
 
-    const payload = {
+    const payload: any = {
       id: mId,
       chat_id: cId,
       sender_id: sId,
@@ -151,7 +181,15 @@ export const useMessages = (chatId: string | null) => {
 
   const markAsRead = async (cId: string, uId: string) => {
     try {
-      const { error } = await supabase.from('messages').update({ status: 'seen', seen: true }).eq('chat_id', cId).neq('sender_id', uId).or('status.neq.seen,status.is.null');
+      const { data, error } = await supabase
+        .from('messages')
+        .update({ status: 'seen', seen: true })
+        .eq('chat_id', cId)
+        .neq('sender_id', uId)
+        .in('status', ['sent', 'delivered'])
+        .select();
+      
+      console.log('[markAsRead] updated:', data, 'error:', error);
       if (error) throw error;
     } catch (err) {
       console.error('[useMessages] Read error:', err);

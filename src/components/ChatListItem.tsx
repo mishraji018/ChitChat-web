@@ -34,8 +34,10 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
     if (!last) return null;
     const props = { size: 13, className: "shrink-0" };
     switch (last.type) {
-      case 'image': return <Image {...props} />;
-      case 'voice': return <Mic {...props} />;
+      case 'image':
+      case 'photo': return <Image {...props} />;
+      case 'voice':
+      case 'audio': return <Mic {...props} />;
       case 'video': return <Video {...props} />;
       case 'file':
       case 'document': return <FileText {...props} />;
@@ -44,9 +46,17 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
   };
 
   const getPText = () => {
-    if (!last) return 'No messages';
-    if (last.type === 'text' || !last.type) return last.content || '';
-    const labels: Record<string, string> = { image: '📷 Photo', video: '🎥 Video', audio: '🎵 Audio', voice: '🎵 Voice', file: '📄 File', document: '📄 Document' };
+    if (!last) return 'No messages yet';
+    if (last.type === 'text' || !last.type) return last.content || last.text || 'No messages yet';
+    const labels: Record<string, string> = { 
+      image: '📷 Photo', 
+      photo: '📷 Photo',
+      video: '🎥 Video', 
+      audio: '🎵 Audio', 
+      voice: '🎵 Audio', 
+      file: '📄 File', 
+      document: '📄 File' 
+    };
     return labels[last.type] || last.type.charAt(0).toUpperCase() + last.type.slice(1);
   };
 

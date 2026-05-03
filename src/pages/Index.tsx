@@ -16,8 +16,6 @@ import ContactInfoPanel from '@/components/ContactInfoPanel';
 import { DeleteChatModal, BlockUserModal, ReportUserModal } from '@/components/ConfirmationModals';
 import { AIAssistant } from '@/components/AIAssistant';
 import type { ThemeType, User, Message, MessageStatus } from '@/types';
-import { useLocalStorage } from '@/hooks/use-local-storage';
-import { wallpapers } from '@/data/wallpapers';
 import { supabase } from '@/config/supabase';
 import { MessageSquare } from "lucide-react";
 import { toast } from '@/components/ui/use-toast';
@@ -49,7 +47,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             *,
             participant1:users!participant1_id(*),
             participant2:users!participant2_id(*),
-            messages:messages(text, created_at, seen, status)
+            messages:messages(text, type, created_at, seen, status, sender_id)
           `)
           .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
           .order('created_at', { ascending: false });
@@ -78,9 +76,13 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               },
               messages: [],
               lastMessage: lastMsg ? {
+                id: lastMsg.id,
+                senderId: lastMsg.sender_id,
+                content: lastMsg.text,
                 text: lastMsg.text,
+                type: lastMsg.type || 'text',
                 timestamp: new Date(lastMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                status: lastMsg.seen ? 'seen' : 'sent'
+                status: (lastMsg.status || (lastMsg.seen ? 'seen' : 'sent')) as MessageStatus
               } : null,
               unreadCount: 0,
               isPinned: false,
@@ -182,8 +184,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     setCurrentTheme(t);
   }, []);
 
-  const [wallpaper, setWallpaper] = useLocalStorage('blinkchat_wallpaper', 'default');
-
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark', 'theme-deep-blue', 'theme-rose');
@@ -230,6 +230,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               senderId: newMessage.sender_id,
               receiverId: newMessage.receiver_id || currentUser.id,
               content: newMessage.text,
+              text: newMessage.text,
               type: newMessage.type || 'text',
               mediaUrl: newMessage.media_url,
               mediaType: newMessage.media_type,
@@ -697,8 +698,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             onClose={() => setShowSettings(false)}
             currentTheme={currentTheme}
             onThemeChange={handleThemeChange}
-            wallpaper={wallpaper}
-            onWallpaperChange={setWallpaper}
             language={language}
             onLanguageChange={onLanguageChange}
             currentUser={currentUser}

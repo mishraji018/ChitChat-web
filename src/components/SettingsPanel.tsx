@@ -9,15 +9,14 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { User, ThemeType } from '@/types/chat';
 import { translations } from '@/i18n/translations';
-import { wallpapers } from '@/data/wallpapers';
+import { useWallpaper } from '@/hooks/useWallpaper';
+import WallpaperModal from './WallpaperModal';
 
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   currentTheme: ThemeType;
   onThemeChange: (theme: ThemeType) => void;
-  wallpaper: string;
-  onWallpaperChange: (wallpaper: string) => void;
   language: string;
   onLanguageChange: (lang: string) => void;
   currentUser: User;
@@ -54,13 +53,14 @@ const SettingsItem = React.forwardRef<HTMLButtonElement, { icon: React.ReactNode
 
 SettingsItem.displayName = 'SettingsItem';
 
-const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper, onWallpaperChange, language, onLanguageChange, currentUser }: SettingsPanelProps) => {
+const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, language, onLanguageChange, currentUser }: SettingsPanelProps) => {
   const safeT = translations[language as keyof typeof translations] || translations['English'];
   
   const [notifications, setNotifications] = useLocalStorage('blinkchat_notifications', { message: true, sound: true, vibration: true });
   const [privacy, setPrivacy] = useLocalStorage('blinkchat_privacy', { lastSeen: 'everyone', profilePhoto: 'everyone', readReceipts: true });
   const [deleteAccountName, setDeleteAccountName] = useState('');
-  const deviceWallpaperRef = useRef<HTMLInputElement>(null);
+  const [showWallpaperModal, setShowWallpaperModal] = useState(false);
+  const { currentWallpaper, setWallpaper } = useWallpaper(); // No chatId = global
 
   const handleDeleteChats = () => {
     toast.success('Your chats have been cleared');
@@ -164,53 +164,19 @@ const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, wallpaper
         </Dialog>
 
         {/* Wallpaper */}
-        <Dialog>
-          <DialogTrigger asChild>
-            <SettingsItem icon={<ImageIcon size={18} />} title="Chat Wallpaper" subtitle="Change default background" />
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Chat Wallpaper</DialogTitle>
-              <DialogDescription className="sr-only">Customize the background of your chat screens.</DialogDescription>
-            </DialogHeader>
-            <div className="grid grid-cols-3 gap-4 py-4">
-              {wallpapers.map(wp => (
-                <button
-                  key={wp.id}
-                  onClick={() => onWallpaperChange(wp.id)}
-                  className={`h-24 rounded-xl border-4 transition-all relative overflow-hidden ${wallpaper === wp.id ? 'border-primary scale-105' : 'border-border hover:border-primary/50'}`}
-                  style={{ background: wp.color }}
-                >
-                  {wallpaper === wp.id && (
-                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
-                      <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                        <Check size={14} className="text-primary-foreground" />
-                      </div>
-                    </div>
-                  )}
-                </button>
-              ))}
-              <button
-                onClick={() => deviceWallpaperRef.current?.click()}
-                className="h-24 rounded-xl border-2 border-dashed border-primary/50 hover:border-primary flex flex-col items-center justify-center gap-2 transition-all hover:bg-primary/10"
-              >
-                <Upload size={20} className="text-primary" />
-                <span className="text-xs text-primary font-medium">Device</span>
-              </button>
-              <input type="file" accept="image/*" className="hidden" ref={deviceWallpaperRef} onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  const reader = new FileReader();
-                  reader.onload = (ev) => {
-                    const dataUrl = ev.target?.result as string;
-                    onWallpaperChange(`device:${dataUrl}`);
-                  };
-                  reader.readAsDataURL(file);
-                }
-              }} />
-            </div>
-          </DialogContent>
-        </Dialog>
+        <SettingsItem 
+          icon={<ImageIcon size={18} />} 
+          title="Chat Wallpaper" 
+          subtitle="Change default background" 
+          onClick={() => setShowWallpaperModal(true)}
+        />
+        <WallpaperModal
+          isOpen={showWallpaperModal}
+          onClose={() => setShowWallpaperModal(false)}
+          currentId={currentWallpaper.id}
+          onApply={(id) => setWallpaper(id, true)}
+          title="Global Wallpaper"
+        />
 
         {/* Language */}
         <Dialog>

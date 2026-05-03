@@ -17,6 +17,8 @@ import { translations } from '@/i18n/translations';
 import { v4 as uuidv4 } from 'uuid';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { useMessages } from '@/hooks/useMessages';
+import { useWallpaper } from '@/hooks/useWallpaper';
+import WallpaperModal from './WallpaperModal';
 import { usePresence } from '@/hooks/usePresence';
 import { useTyping } from '@/hooks/useTyping';
 import { useStreak } from '@/hooks/useStreak';
@@ -72,9 +74,8 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const [isBlocked, setIsBlocked] = useLocalStorage(`blocked_${chat?.user.id}`, false);
   const [nickname] = useLocalStorage(`nickname_${chat?.user.id}`, chat?.user.displayName || '');
   const [isMuted, setIsMuted] = useLocalStorage(`muted_${chat?.id}`, false);
-  const [isPinned, setIsPinned] = useLocalStorage(`pinned_${chat?.id}`, false);
   const [isArchived, setIsArchived] = useLocalStorage(`archived_${chat?.id}`, false);
-  const [wallpaper, setWallpaper] = useLocalStorage(`wallpaper_${chat?.id}`, 'default');
+  const { currentWallpaper, setWallpaper } = useWallpaper(chat?.id);
   
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
@@ -115,11 +116,8 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
   useEffect(() => {
     if (chat?.id && currentUser?.id) {
+      console.log('[markAsRead] calling for chat:', chat.id, 'user:', currentUser.id);
       markAsRead(chat.id, currentUser.id);
-      if (messages.length > 0) {
-        const last = messages[messages.length - 1];
-        if (last.senderId !== currentUser.id) markAsRead(chat.id, currentUser.id);
-      }
     }
   }, [chat?.id, currentUser.id, messages.length]);
 
@@ -163,15 +161,6 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
   const statusText = isRecTyping ? 'typing...' : isContactOnline ? 'Online' : formatLS(chat?.user.lastSeen || '');
   const safeT = t || translations['English'];
-
-  const WALLPAPERS = [
-    { id: 'default', name: 'Default', class: 'bg-[#0f0f0f]' },
-    { id: 'purple', name: 'Purple Gradient', class: 'bg-gradient-to-br from-[#1a0b2e] via-[#0f0f0f] to-[#0a0a0a]' },
-    { id: 'blue', name: 'Blue Gradient', class: 'bg-gradient-to-br from-[#0b1a2e] via-[#0f0f0f] to-[#050505]' },
-    { id: 'green', name: 'Green Gradient', class: 'bg-gradient-to-br from-[#0b2e1a] via-[#0f0f0f] to-[#050505]' },
-    { id: 'sunset', name: 'Sunset Gradient', class: 'bg-gradient-to-br from-[#2e1a0b] via-[#0f0f0f] to-[#0a0a0a]' },
-    { id: 'ocean', name: 'Ocean Gradient', class: 'bg-gradient-to-br from-[#004e92] via-[#000428] to-[#0a0a0a]' },
-  ];
 
   const REPORT_REASONS = ["Spam", "Harassment", "Fake Account", "Inappropriate Content", "Other"];
 
@@ -350,11 +339,36 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             <AnimatePresence>{showSearch && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="absolute top-full left-0 right-0 bg-[#1a1a1a] border-b border-white/5 z-20 px-4 py-3 flex items-center gap-3 backdrop-blur-xl"><Search size={18} className="text-zinc-500" /><input autoFocus type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-transparent border-none outline-none text-[14px] text-zinc-100" /><div className="flex items-center gap-2">{searchQuery && <span className="text-[11px] text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full">{searchResults.length > 0 ? `${currentMatch + 1}/${searchResults.length}` : '0 results'}</span>}<div className="flex items-center border-l border-white/10 pl-2"><button disabled={!searchResults.length} onClick={() => setCurrentMatch(p => (p - 1 + searchResults.length) % searchResults.length)} className="p-1.5 text-zinc-500 disabled:opacity-30"><ChevronUp size={16} /></button><button disabled={!searchResults.length} onClick={() => setCurrentMatch(p => (p + 1) % searchResults.length)} className="p-1.5 text-zinc-500 disabled:opacity-30"><ChevronDown size={16} /></button></div><button onClick={() => { onCloseSearch?.(); setSearchQuery(''); }} className="p-1.5 text-zinc-500 hover:text-purple-400"><CloseIcon size={18} /></button></div></motion.div>}</AnimatePresence>
           </div>
           {isBlocked && <div className="bg-red-500/10 text-red-400 text-[12px] py-2 px-4 text-center border-b border-red-500/20 z-20">You have blocked this user. <button onClick={handleBlock} className="font-bold underline">Unblock</button></div>}
-          <div ref={containerRef} onScroll={onScroll} className={`flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-1 chat-pattern scrollbar-thin z-10 ${WALLPAPERS.find(w => w.id === wallpaper)?.class || 'bg-[#0f0f0f]'}`}>
+          <div 
+            ref={containerRef} 
+            onScroll={onScroll} 
+            className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-1 chat-pattern scrollbar-thin z-10"
+            style={{ background: currentWallpaper.bg }}
+          >
             {!isOnline && <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2">{getQueue().length > 0 ? `📵 Offline — ${getQueue().length} queued` : "📵 You're offline"}</div>}
             {wasOffline && isOnline && <div className="bg-green-500/20 border border-green-500/30 text-green-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2 animate-pulse">✅ Back online! Sending...</div>}
             <div ref={topObserverRef} className="h-4 flex items-center justify-center mb-4">{mLoading && <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />}</div>
-            {messages.length === 0 && !mLoading ? <div className="flex-1 flex flex-col items-center justify-center opacity-40 py-20"><div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center mb-4"><motion.span animate={{ rotate: [0, 20, 0] }} transition={{ repeat: Infinity, duration: 1.5 }} className="text-3xl">👋</motion.span></div><p className="text-zinc-400 font-medium">Say hi to {nickname || chat.user.displayName}!</p></div> : messages.map((m, i) => <MessageBubble key={m.id} message={m} isSent={m.senderId === currentUser.id} t={t} currentUser={currentUser} searchQuery={searchQuery} isHighlighted={searchResults[currentMatch] === i} onReact={(e) => onReact?.(chat.id, m.id, e)} />)}
+            {messages.length === 0 && !mLoading && chat?.id ? (
+              <div className="flex-1 flex flex-col items-center justify-center opacity-40 py-20">
+                <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+                  <motion.span animate={{ rotate: [0, 20, 0] }} transition={{ repeat: Infinity, duration: 1.5 }} className="text-3xl">👋</motion.span>
+                </div>
+                <p className="text-zinc-400 font-medium">Say hi to {nickname || chat.user.displayName}!</p>
+              </div>
+            ) : (
+              messages.map((m, i) => (
+                <MessageBubble 
+                  key={m.id} 
+                  message={m} 
+                  isSent={m.senderId === currentUser.id} 
+                  t={t} 
+                  currentUser={currentUser} 
+                  searchQuery={searchQuery} 
+                  isHighlighted={searchResults[currentMatch] === i} 
+                  onReact={(e) => onReact?.(chat.id, m.id, e)} 
+                />
+              ))
+            )}
             {isRecTyping && <TypingIndicator />}<div ref={messagesEndRef} /><div ref={bottomRef} />
           </div>
            <AnimatePresence>{showScrollBtn && <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} onClick={() => scroll()} className="absolute bottom-32 right-6 w-10 h-10 rounded-full bg-[#1a1a1a] border border-white/10 shadow-2xl flex items-center justify-center text-zinc-400 hover:text-zinc-100 z-20"><ChevronDown size={20} /></motion.button>}</AnimatePresence>
@@ -364,26 +378,13 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
       {/* Modals */}
       <AnimatePresence>
-        {showWallpaperModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1a1a] border border-white/10 rounded-[32px] w-full max-w-md overflow-hidden">
-              <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-zinc-100">Chat Wallpaper</h3>
-                <button onClick={() => setShowWallpaperModal(false)} className="p-2 text-zinc-500 hover:text-zinc-100"><CloseIcon size={20} /></button>
-              </div>
-              <div className="p-6 grid grid-cols-2 gap-4">
-                {WALLPAPERS.map(w => (
-                  <button key={w.id} onClick={() => { setWallpaper(w.id); setShowWallpaperModal(false); }} className={`group relative h-24 rounded-2xl border-2 transition-all overflow-hidden ${w.class} ${wallpaper === w.id ? 'border-purple-500 ring-4 ring-purple-500/20' : 'border-white/5 hover:border-white/20'}`}>
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">{w.name}</span>
-                    </div>
-                    {wallpaper === w.id && <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center text-[10px] text-white">✓</div>}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
+        <WallpaperModal
+          isOpen={showWallpaperModal}
+          onClose={() => setShowWallpaperModal(false)}
+          currentId={currentWallpaper.id}
+          onApply={(id) => setWallpaper(id, false)}
+          title="Chat Wallpaper"
+        />
 
         {showReportModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
