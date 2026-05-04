@@ -6,112 +6,90 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 220 25% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 25% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 10%;
-    --primary: 16 100% 50%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 94%;
-    --secondary-foreground: 220 25% 20%;
-    --muted: 210 20% 94%;
-    --muted-foreground: 220 10% 45%;
-    --accent: 16 100% 96%;
-    --accent-foreground: 16 100% 40%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 210 20% 90%;
-    --input: 210 20% 94%;
-    --ring: 16 100% 50%;
-    --radius: 1.5rem;
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #242424;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --border-color: rgba(255, 255, 255, 0.05);
+    --bubble-sent: #7c3aed;
+    --bubble-received: #1e1e1e;
+    --bubble-received-text: #f4f4f5;
+    --input-bg: #1a1a1a;
+    --sidebar-bg: #141414;
 
-    /* Blink premium tokens */
-    --gradient-primary: linear-gradient(135deg, #ff4500, #ff8c00);
-    --bubble-sent: 16 100% 50%;
-    --bubble-received: 0 0% 100%;
-    --chat-bg: 210 20% 98%;
-    --sidebar-bg: 0 0% 100%;
-    --online: 142 70% 45%;
-    --typing: 16 100% 50%;
-
-    /* Custom Border Radii */
-    --radius-sm: 0.75rem;
-    --radius-md: 1rem;
-    --radius-lg: 1.5rem;
-    --radius-xl: 2rem;
-
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-  }
-
-  /* Dark mode overrides if needed */
-  .theme-light {
-    --background: 210 20% 98%;
-    --foreground: 220 25% 10%;
-    --card: 0 0% 100%;
-    --secondary: 210 20% 94%;
-    --muted: 210 20% 94%;
-    --border: 210 20% 90%;
-  }
-
-  .dark {
-    --background: 220 25% 6%;
+    /* Legacy HSL for shadcn/ui */
+    --background: 240 10% 4%;
     --foreground: 210 20% 98%;
-    --card: 220 25% 10%;
+    --card: 240 10% 6%;
     --card-foreground: 210 20% 98%;
-    --popover: 220 25% 10%;
+    --popover: 240 10% 6%;
     --popover-foreground: 210 20% 98%;
-    --primary: 16 100% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 25% 14%;
-    --secondary-foreground: 210 20% 90%;
-    --muted: 220 25% 14%;
-    --muted-foreground: 220 10% 65%;
-    --accent: 220 25% 14%;
+    --primary: 263.4 70% 50.4%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 240 10% 10%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 240 10% 10%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 10% 10%;
     --accent-foreground: 210 20% 98%;
-    --border: 220 25% 15%;
-    --input: 220 25% 14%;
-    --ring: 16 100% 60%;
-    --chat-bg: 220 25% 4%;
-    --sidebar-bg: 220 25% 10%;
-    --bubble-received: 220 25% 14%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 240 10% 12%;
+    --input: 240 10% 12%;
+    --ring: 263.4 70% 50.4%;
+    --radius: 1.5rem;
+    
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  [data-theme="light"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f5f5f5;
+    --bg-tertiary: #eeeeee;
+    --text-primary: #111111;
+    --text-secondary: #444444;
+    --border-color: rgba(0,0,0,0.1);
+    --bubble-sent: #7c3aed;
+    --bubble-received: #e5e5e5;
+    --bubble-received-text: #111111;
+    --input-bg: #f0f0f0;
+    --sidebar-bg: #fafafa;
+
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 262.1 83.3% 57.8%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 262.1 83.3% 57.8%;
   }
 
   .theme-deep-blue {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 12%;
-    --card-foreground: 210 40% 98%;
+    --bg-primary: #0a0e17;
+    --bg-secondary: #131a26;
+    --text-primary: #f0f4f8;
     --primary: 217 91% 60%;
-    --secondary: 217 33% 15%;
-    --muted: 217 33% 15%;
-    --muted-foreground: 215 20% 65%;
-    --border: 217 33% 18%;
-    --chat-bg: 222 47% 4%;
-    --sidebar-bg: 222 47% 12%;
-    --bubble-sent: 217 91% 60%;
-    --bubble-received: 217 33% 15%;
-    --ring: 217 91% 60%;
-    --gradient-primary: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    /* ... add more if needed, but priority is light mode */
   }
 
   .theme-rose {
-    --background: 340 40% 4%;
-    --foreground: 340 20% 98%;
-    --card: 340 40% 8%;
-    --card-foreground: 340 20% 98%;
+    --bg-primary: #0f0507;
+    --bg-secondary: #1a0a0d;
+    --text-primary: #fff1f2;
     --primary: 340 82% 60%;
-    --secondary: 340 30% 12%;
-    --muted: 340 30% 12%;
-    --muted-foreground: 340 10% 65%;
-    --border: 340 30% 15%;
-    --chat-bg: 340 40% 3%;
-    --sidebar-bg: 340 40% 8%;
-    --bubble-sent: 340 82% 60%;
-    --bubble-received: 340 30% 12%;
-    --ring: 340 82% 60%;
-    --gradient-primary: linear-gradient(135deg, #e11d48, #9f1239);
   }
 }
 

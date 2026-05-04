@@ -20,7 +20,7 @@ export const useAIChat = () => {
         },
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
-          max_tokens: 1000,
+          max_tokens: 500,
           messages: [
             {
               role: 'system',

@@ -11,9 +11,7 @@ export default defineConfig({
     hmr: { 
       overlay: false,
       protocol: 'ws',
-      timeout: 5000,
-      // Add this:
-      preserveState: true
+      timeout: 5000
     }
   },
   resolve: {

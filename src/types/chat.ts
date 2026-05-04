@@ -45,6 +45,7 @@ export interface Message {
     longitude?: number;
     name?: string;
   };
+  is_ai?: boolean;
 }
 
 export interface Chat {

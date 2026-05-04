@@ -26,18 +26,18 @@ export const useAIReply = () => {
           'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`
         },
         body: JSON.stringify({
-          model: 'llama3-8b-8192',
-          max_tokens: 150,
+          model: 'llama-3.3-70b-versatile',
           messages: [
             {
               role: 'system',
-              content: `You are a chat assistant. Based on the conversation, suggest 3 short natural reply options the user might want to send next. Same language as conversation (Hindi/English/Hinglish). Return ONLY raw JSON array: ["reply1","reply2","reply3"]`
+              content: `Give exactly 3 short reply suggestions. Same language as conversation (Hindi/English/Hinglish). Return ONLY raw JSON array: ["reply1","reply2","reply3"]`
             },
             {
-              role: 'user',
-              content: `Last messages:\n${validMessages}\n\nSuggest 3 replies in JSON.`
+              role: 'user', 
+              content: validMessages || 'Hello'
             }
-          ]
+          ],
+          max_tokens: 150
         })
       });
 

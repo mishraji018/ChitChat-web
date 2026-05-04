@@ -29,6 +29,7 @@ import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { useIndexedDB } from '@/hooks/useIndexedDB';
+import AIPanel from './AIPanel';
 import { toast } from 'sonner';
 import { toast as shadcnToast } from '@/components/ui/use-toast';
 
@@ -52,6 +53,7 @@ interface ChatPanelProps {
   onAddToGroup?: (user: UserType) => void;
   onOpenWallpaper?: () => void;
   onReact?: (chatId: string, messageId: string, emoji: string) => void;
+  allChats?: Chat[];
 }
 
 const TypingIndicator = () => (
@@ -69,12 +71,13 @@ const TypingIndicator = () => (
   </div>
 );
 
-const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, onOpenSearch, showSearch, onCloseSearch, onToggleMute, onTogglePin, onToggleArchive, onToggleBlock, onDeleteChat, onReportChat, onAddToGroup, onOpenWallpaper, onReact }: ChatPanelProps) => {
+const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, onOpenSearch, showSearch, onCloseSearch, onToggleMute, onTogglePin, onToggleArchive, onToggleBlock, onDeleteChat, onReportChat, onAddToGroup, onOpenWallpaper, onReact, allChats = [] }: ChatPanelProps) => {
   // ─── [1-45] State & Refs ──────────────────
   const [isBlocked, setIsBlocked] = useLocalStorage(`blocked_${chat?.user.id}`, false);
   const [nickname] = useLocalStorage(`nickname_${chat?.user.id}`, chat?.user.displayName || '');
   const [isMuted, setIsMuted] = useLocalStorage(`muted_${chat?.id}`, false);
   const [isArchived, setIsArchived] = useLocalStorage(`archived_${chat?.id}`, false);
+  const [isPinned, setIsPinned] = useLocalStorage(`pinned_${chat?.id}`, false);
   const { currentWallpaper, setWallpaper } = useWallpaper(chat?.id);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +91,8 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const [showReportModal, setShowReportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [inputText, setInputText] = useState('');
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -165,23 +170,34 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const REPORT_REASONS = ["Spam", "Harassment", "Fake Account", "Inappropriate Content", "Other"];
 
   // ─── [131-250] Handlers ───────────────────
-  const handleSend = async (text: string, iType?: string, iMedia?: any) => {
+  const handleSend = async (text: string, iType?: string, iMedia?: any, isAI: boolean = false) => {
     if (!chat || !currentUser) return;
     const type = iType || 'text', content = text.trim();
     if (type === 'text' && !content) return;
 
-    if (!isOnline) {
+    if (!isOnline && !isAI) {
       addToQueue({ id: uuidv4(), chatId: chat.id, senderId: currentUser.id, text: content, createdAt: new Date().toISOString() });
       return;
     }
     try {
-      console.log('Sending:', { content, chatId: chat.id, userId: currentUser.id });
-      const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia);
+      console.log('Sending:', { content, chatId: chat.id, userId: currentUser.id, isAI });
+      const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia, undefined, isAI);
       await updateStreak();
-      if (onSendMessage && data) onSendMessage(chat.id, { id: data.id, senderId: currentUser.id, receiverId: chat.user.id, type, content, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), createdAt: data.created_at, status: 'sent' } as Message);
+      if (onSendMessage && data) onSendMessage(chat.id, { 
+        id: data.id, 
+        senderId: currentUser.id, 
+        receiverId: chat.user.id, 
+        type, 
+        content, 
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+        createdAt: data.created_at, 
+        status: 'sent',
+        is_ai: isAI
+      } as Message);
+      return data;
     } catch (err) {
       console.error('Send failed:', err);
-      toast.error('Failed to send message');
+      if (!isAI) toast.error('Failed to send message');
     }
   };
 
@@ -282,32 +298,32 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
   // ─── [251-561] Render ─────────────────────
   return (
-    <div className="flex-1 h-full bg-[#0f0f0f] relative overflow-hidden flex flex-col">
+    <div className="flex-1 h-full bg-[var(--bg-primary)] relative overflow-hidden flex flex-col">
       {!chat ? (
-        <div className="flex-1 flex items-center justify-center text-center p-8 bg-[#0f0f0f]">
-          <div className="flex flex-col items-center"><div className="w-24 h-24 rounded-[32px] bg-purple-500/5 flex items-center justify-center mb-6 border border-purple-500/10"><Search size={48} className="text-purple-500/40" /></div><h3 className="text-xl font-bold text-zinc-100 mb-2">Select a chat</h3><p className="text-zinc-500 text-sm max-w-[240px]">Select a conversation to start.</p></div>
+        <div className="flex-1 flex items-center justify-center text-center p-8 bg-[var(--bg-primary)]">
+          <div className="flex flex-col items-center"><div className="w-24 h-24 rounded-[32px] bg-purple-500/5 flex items-center justify-center mb-6 border border-purple-500/10"><Search size={48} className="text-purple-500/40" /></div><h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">Select a chat</h3><p className="text-[var(--text-secondary)] text-sm max-w-[240px]">Select a conversation to start.</p></div>
         </div>
       ) : (
         <>
-          <div className="h-[72px] px-6 border-b border-white/5 bg-[#0f0f0f]/80 backdrop-blur-xl flex items-center justify-between z-30 shrink-0">
+          <div className="h-[72px] px-6 border-b border-[var(--border-color)] bg-[var(--bg-primary)]/80 backdrop-blur-xl flex items-center justify-between z-30 shrink-0">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <button onClick={onBack} className="p-2 -ml-2 text-zinc-500 md:hidden"><ArrowLeft size={20} /></button>
+              <button onClick={onBack} className="p-2 -ml-2 text-[var(--text-secondary)] md:hidden"><ArrowLeft size={20} /></button>
               <div className="relative cursor-pointer flex items-center gap-3" onClick={onOpenInfo}>
                 <UserAvatar name={nickname || chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isContactOnline} className="w-10 h-10" />
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-[15px] text-zinc-100 truncate">{nickname || chat.user.displayName}</h3>
-                    {isMuted && <BellOff size={12} className="text-zinc-500" />}
+                    <h3 className="font-bold text-[15px] text-[var(--text-primary)] truncate">{nickname || chat.user.displayName}</h3>
+                    {isMuted && <BellOff size={12} className="text-[var(--text-secondary)]" />}
                     {streak >= 2 && <span className={`text-sm font-bold flex items-center gap-1 ${streak >= 30 ? 'text-yellow-400 animate-pulse' : streak >= 7 ? 'text-yellow-400' : 'text-orange-400'}`}>{streak >= 30 ? '🔥🔥🔥' : streak >= 7 ? '🔥🔥' : '🔥'} {streak}</span>}
                   </div>
-                  <span className={`text-[11px] font-medium ${isRecTyping ? 'text-purple-400' : 'text-zinc-500'} flex items-center gap-1`}>{isContactOnline && !isRecTyping && !isBlocked && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}{!isBlocked ? statusText : 'Offline'}</span>
+                  <span className={`text-[11px] font-medium ${isRecTyping ? 'text-purple-400' : 'text-[var(--text-secondary)]'} flex items-center gap-1`}>{isContactOnline && !isRecTyping && !isBlocked && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}{!isBlocked ? statusText : 'Offline'}</span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <MemoryCapsuleCreation chatId={chat.id} currentUserId={currentUser.id} /><MemoryCapsuleList chatId={chat.id} /><button onClick={onOpenSearch} className="p-2 text-zinc-500 hover:text-purple-400 hover:bg-white/5 rounded-xl"><Search size={20} /></button>
-              <div className="relative" ref={menuRef}><button onClick={() => setShowMenu(!showMenu)} className="p-2 text-zinc-500 hover:text-zinc-200 hover:bg-white/5 rounded-xl"><MoreVertical size={20} /></button>
-                <AnimatePresence>{showMenu && <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }} className="absolute right-0 mt-2 w-60 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl z-[100] py-2 overflow-hidden backdrop-blur-xl">
+              <MemoryCapsuleCreation chatId={chat.id} currentUserId={currentUser.id} /><MemoryCapsuleList chatId={chat.id} /><button onClick={onOpenSearch} className="p-2 text-[var(--text-secondary)] hover:text-purple-400 hover:bg-white/5 rounded-xl"><Search size={20} /></button>
+              <div className="relative" ref={menuRef}><button onClick={() => setShowMenu(!showMenu)} className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded-xl"><MoreVertical size={20} /></button>
+                <AnimatePresence>{showMenu && <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }} className="absolute right-0 mt-2 w-60 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-2xl z-[100] py-2 overflow-hidden backdrop-blur-xl">
                   {[
                     { icon: <User size={16} />, label: 'Contact Info', action: onOpenInfo },
                     { icon: <UserPlus size={16} />, label: 'Add to Group', action: () => { toast.info("Group feature coming soon!"); onAddToGroup?.(chat.user); } },
@@ -326,7 +342,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                         <button
                           key={idx}
                           onClick={() => { (item as any).action?.(); setShowMenu(false); }}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium hover:bg-white/5 transition-colors ${(item as any).className || 'text-zinc-300'}`}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium hover:bg-white/5 transition-colors ${(item as any).className || 'text-[var(--text-primary)]'}`}
                         >
                           {(item as any).icon}
                           <span>{(item as any).label}</span>
@@ -336,7 +352,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                 </motion.div>}</AnimatePresence>
               </div>
             </div>
-            <AnimatePresence>{showSearch && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="absolute top-full left-0 right-0 bg-[#1a1a1a] border-b border-white/5 z-20 px-4 py-3 flex items-center gap-3 backdrop-blur-xl"><Search size={18} className="text-zinc-500" /><input autoFocus type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-transparent border-none outline-none text-[14px] text-zinc-100" /><div className="flex items-center gap-2">{searchQuery && <span className="text-[11px] text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full">{searchResults.length > 0 ? `${currentMatch + 1}/${searchResults.length}` : '0 results'}</span>}<div className="flex items-center border-l border-white/10 pl-2"><button disabled={!searchResults.length} onClick={() => setCurrentMatch(p => (p - 1 + searchResults.length) % searchResults.length)} className="p-1.5 text-zinc-500 disabled:opacity-30"><ChevronUp size={16} /></button><button disabled={!searchResults.length} onClick={() => setCurrentMatch(p => (p + 1) % searchResults.length)} className="p-1.5 text-zinc-500 disabled:opacity-30"><ChevronDown size={16} /></button></div><button onClick={() => { onCloseSearch?.(); setSearchQuery(''); }} className="p-1.5 text-zinc-500 hover:text-purple-400"><CloseIcon size={18} /></button></div></motion.div>}</AnimatePresence>
+            <AnimatePresence>{showSearch && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="absolute top-full left-0 right-0 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] z-20 px-4 py-3 flex items-center gap-3 backdrop-blur-xl"><Search size={18} className="text-[var(--text-secondary)]" /><input autoFocus type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-transparent border-none outline-none text-[14px] text-[var(--text-primary)]" /><div className="flex items-center gap-2">{searchQuery && <span className="text-[11px] text-[var(--text-secondary)] bg-white/5 px-2 py-0.5 rounded-full">{searchResults.length > 0 ? `${currentMatch + 1}/${searchResults.length}` : '0 results'}</span>}<div className="flex items-center border-l border-[var(--border-color)] pl-2"><button disabled={!searchResults.length} onClick={() => setCurrentMatch(p => (p - 1 + searchResults.length) % searchResults.length)} className="p-1.5 text-[var(--text-secondary)] disabled:opacity-30"><ChevronUp size={16} /></button><button disabled={!searchResults.length} onClick={() => setCurrentMatch(p => (p + 1) % searchResults.length)} className="p-1.5 text-[var(--text-secondary)] disabled:opacity-30"><ChevronDown size={16} /></button></div><button onClick={() => { onCloseSearch?.(); setSearchQuery(''); }} className="p-1.5 text-[var(--text-secondary)] hover:text-purple-400"><CloseIcon size={18} /></button></div></motion.div>}</AnimatePresence>
           </div>
           {isBlocked && <div className="bg-red-500/10 text-red-400 text-[12px] py-2 px-4 text-center border-b border-red-500/20 z-20">You have blocked this user. <button onClick={handleBlock} className="font-bold underline">Unblock</button></div>}
           <div 
@@ -348,15 +364,17 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             {!isOnline && <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2">{getQueue().length > 0 ? `📵 Offline — ${getQueue().length} queued` : "📵 You're offline"}</div>}
             {wasOffline && isOnline && <div className="bg-green-500/20 border border-green-500/30 text-green-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2 animate-pulse">✅ Back online! Sending...</div>}
             <div ref={topObserverRef} className="h-4 flex items-center justify-center mb-4">{mLoading && <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />}</div>
+            
             {messages.length === 0 && !mLoading && chat?.id ? (
               <div className="flex-1 flex flex-col items-center justify-center opacity-40 py-20">
                 <div className="w-16 h-16 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
                   <motion.span animate={{ rotate: [0, 20, 0] }} transition={{ repeat: Infinity, duration: 1.5 }} className="text-3xl">👋</motion.span>
                 </div>
-                <p className="text-zinc-400 font-medium">Say hi to {nickname || chat.user.displayName}!</p>
+                <p className="text-[var(--text-secondary)] font-medium">Say hi to {nickname || chat.user.displayName}!</p>
               </div>
             ) : (
-              messages.map((m, i) => (
+              messages
+                .map((m, i) => (
                 <MessageBubble 
                   key={m.id} 
                   message={m} 
@@ -371,8 +389,30 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             )}
             {isRecTyping && <TypingIndicator />}<div ref={messagesEndRef} /><div ref={bottomRef} />
           </div>
-           <AnimatePresence>{showScrollBtn && <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} onClick={() => scroll()} className="absolute bottom-32 right-6 w-10 h-10 rounded-full bg-[#1a1a1a] border border-white/10 shadow-2xl flex items-center justify-center text-zinc-400 hover:text-zinc-100 z-20"><ChevronDown size={20} /></motion.button>}</AnimatePresence>
-          <InputBar onSend={handleSend} t={safeT} currentUser={currentUser} onTyping={handleTyping} onSendFile={handleFileSend} isRecipientOnline={isContactOnline} messages={messages} currentUserId={currentUser.id} disabled={isBlocked} />
+           <AnimatePresence>{showScrollBtn && <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} onClick={() => scroll()} className="absolute bottom-32 right-6 w-10 h-10 rounded-full bg-[var(--bg-secondary)] border border-[var(--border-color)] shadow-2xl flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] z-20"><ChevronDown size={20} /></motion.button>}</AnimatePresence>
+          <InputBar 
+            onSend={handleSend} 
+            t={safeT} 
+            currentUser={currentUser} 
+            onTyping={handleTyping} 
+            onSendFile={handleFileSend} 
+            isRecipientOnline={isContactOnline} 
+            messages={messages} 
+            currentUserId={currentUser.id} 
+            disabled={isBlocked} 
+            onOpenAI={() => setShowAIPanel(!showAIPanel)}
+            value={inputText}
+            onChange={setInputText}
+          />
+
+          <AIPanel 
+            isOpen={showAIPanel} 
+            onClose={() => setShowAIPanel(false)} 
+            currentUser={currentUser} 
+            messages={messages}
+            recipientName={nickname || chat.user.displayName}
+            onApplySuggestion={(text) => setInputText(text)}
+          />
         </>
       )}
 
@@ -388,15 +428,15 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
         {showReportModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1a1a] border border-white/10 rounded-[32px] w-full max-w-md overflow-hidden">
-              <div className="p-6 border-b border-white/5 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-zinc-100">Report Chat</h3>
-                <button onClick={() => setShowReportModal(false)} className="p-2 text-zinc-500 hover:text-zinc-100"><CloseIcon size={20} /></button>
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[32px] w-full max-w-md overflow-hidden">
+              <div className="p-6 border-b border-[var(--border-color)] flex items-center justify-between">
+                <h3 className="text-xl font-bold text-[var(--text-primary)]">Report Chat</h3>
+                <button onClick={() => setShowReportModal(false)} className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><CloseIcon size={20} /></button>
               </div>
               <div className="p-6 flex flex-col gap-2">
-                <p className="text-sm text-zinc-400 mb-4">Select a reason for reporting this conversation. Your report is anonymous.</p>
+                <p className="text-sm text-[var(--text-secondary)] mb-4">Select a reason for reporting this conversation. Your report is anonymous.</p>
                 {REPORT_REASONS.map(r => (
-                  <button key={r} onClick={() => handleReport(r)} className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[13px] text-zinc-200 transition-colors">{r}</button>
+                  <button key={r} onClick={() => handleReport(r)} className="w-full text-left px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[13px] text-[var(--text-primary)] transition-colors">{r}</button>
                 ))}
               </div>
             </motion.div>
@@ -405,12 +445,12 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1a1a] border border-white/10 rounded-[32px] w-full max-w-sm p-8 text-center">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[32px] w-full max-w-sm p-8 text-center">
               <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6 text-red-500"><Trash2 size={32} /></div>
-              <h3 className="text-xl font-bold text-zinc-100 mb-2">Delete Chat?</h3>
-              <p className="text-zinc-400 text-sm mb-8">This action cannot be undone. All messages in this conversation will be permanently removed.</p>
+              <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">Delete Chat?</h3>
+              <p className="text-[var(--text-secondary)] text-sm mb-8">This action cannot be undone. All messages in this conversation will be permanently removed.</p>
               <div className="flex gap-3">
-                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-white/5 text-zinc-300 rounded-xl font-bold">Cancel</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-white/5 text-[var(--text-secondary)] rounded-xl font-bold">Cancel</button>
                 <button onClick={handleDelete} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Delete</button>
               </div>
             </motion.div>
@@ -419,12 +459,12 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
         {showBlockConfirm && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#1a1a1a] border border-white/10 rounded-[32px] w-full max-w-sm p-8 text-center">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-[32px] w-full max-w-sm p-8 text-center">
               <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6 text-red-500"><Ban size={32} /></div>
-              <h3 className="text-xl font-bold text-zinc-100 mb-2">Block User?</h3>
-              <p className="text-zinc-400 text-sm mb-8">You will no longer receive messages from this contact, and they won't be able to see your status.</p>
+              <h3 className="text-xl font-bold text-[var(--text-primary)] mb-2">Block User?</h3>
+              <p className="text-[var(--text-secondary)] text-sm mb-8">You will no longer receive messages from this contact, and they won't be able to see your status.</p>
               <div className="flex gap-3">
-                <button onClick={() => setShowBlockConfirm(false)} className="flex-1 py-3 bg-white/5 text-zinc-300 rounded-xl font-bold">Cancel</button>
+                <button onClick={() => setShowBlockConfirm(false)} className="flex-1 py-3 bg-white/5 text-[var(--text-secondary)] rounded-xl font-bold">Cancel</button>
                 <button onClick={handleBlock} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold">Block</button>
               </div>
             </motion.div>

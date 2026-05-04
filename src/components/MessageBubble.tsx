@@ -32,7 +32,7 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
 
   const highlight = (txt: string, q: string) => {
     if (!q) return txt;
-    return txt.split(new RegExp(`(${q})`, 'gi')).map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i} className="bg-purple-500/40 text-zinc-100 rounded px-0.5 font-bold">{p}</mark> : p);
+    return txt.split(new RegExp(`(${q})`, 'gi')).map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i} className="bg-purple-500/40 text-[var(--text-primary)] rounded px-0.5 font-bold">{p}</mark> : p);
   };
 
   // ─── [16-160] Render Logic ────────────────
@@ -58,20 +58,21 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
       case 'location': return <div className="flex items-center gap-3 min-w-[200px] py-1"><div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center"><MapPin size={20} className="text-primary" /></div><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{dat?.name || 'Location'}</p><p className="text-xs opacity-70 truncate">{dat?.address || mContent}</p></div></div>;
       case 'sticker': return <span className="text-6xl block py-2">{mContent}</span>;
       case 'file':
-      case 'document': return <div className="relative">{(up || q || err) && <Status />}<a href={mUrl} download={name} target="_blank" rel="noreferrer" className={`flex items-center gap-3 bg-[#121212] hover:bg-[#1a1a1a] rounded-xl p-3 min-w-[220px] transition-all border border-purple-500/20 ${up || q || err ? 'blur-[1px]' : ''}`}><div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-xl">📄</div><div className="flex-1 min-w-0"><p className="text-sm font-medium truncate text-zinc-100">{name || message.fileName || 'Document'}</p><p className="text-[10px] text-zinc-500 font-bold uppercase">{fSize(sz || 0)}</p></div><Download size={18} className="text-purple-400" /></a></div>;
+      case 'document': return <div className="relative">{(up || q || err) && <Status />}<a href={mUrl} download={name} target="_blank" rel="noreferrer" className={`flex items-center gap-3 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded-xl p-3 min-w-[220px] transition-all border border-purple-500/20 ${up || q || err ? 'blur-[1px]' : ''}`}><div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-xl">📄</div><div className="flex-1 min-w-0"><p className="text-sm font-medium truncate text-[var(--text-primary)]">{name || message.fileName || 'Document'}</p><p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase">{fSize(sz || 0)}</p></div><Download size={18} className="text-purple-400" /></a></div>;
       default: return <p className={`${isEmoji ? 'text-5xl py-2' : 'text-sm'} leading-relaxed break-words whitespace-pre-wrap`}>{searchQuery ? highlight(mContent, searchQuery) : mContent}</p>;
     }
   };
 
   // ─── [161-273] Final Render ───────────────
+
   return (
     <motion.div initial={isSent ? { opacity: 0, x: 20 } : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className={`flex w-full mb-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
       <ContextMenu>
         <ContextMenuTrigger className="max-w-[85%] md:max-w-[75%]">
-          <div className={`px-4 py-2.5 rounded-[22px] relative transition-all active:scale-[0.98] ${isHighlighted ? 'ring-2 ring-purple-500/50 ring-offset-2 ring-offset-[#0f0f0f]' : ''} ${isEmoji ? 'bg-transparent shadow-none' : isSent ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-br-sm shadow-lg shadow-purple-500/10' : 'bg-[#1e1e1e] text-zinc-100 border border-white/5 rounded-bl-sm shadow-sm'}`}>
+          <div className={`px-4 py-2.5 rounded-[22px] relative transition-all active:scale-[0.98] ${isHighlighted ? 'ring-2 ring-purple-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]' : ''} ${isEmoji ? 'bg-transparent shadow-none' : isSent ? 'bg-gradient-to-br from-purple-600 to-indigo-600 text-white rounded-br-sm shadow-lg shadow-purple-500/10' : 'bg-[var(--bubble-received)] text-[var(--bubble-received-text)] border border-[var(--border-color)] rounded-bl-sm shadow-sm'}`}>
             {render()}
             {!isEmoji && (
-              <div className={`flex items-center justify-end gap-1.5 mt-1 ${isSent ? 'text-white/60' : 'text-zinc-500'}`}>
+              <div className={`flex items-center justify-end gap-1.5 mt-1 ${isSent ? 'text-white/60' : 'text-[var(--text-secondary)]'}`}>
                 {message.isEdited && <span className="text-[9px] italic mr-1">edited</span>}
                 <span className="text-[10px] font-medium">{message.timestamp}</span>
                 {isSent && (

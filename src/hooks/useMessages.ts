@@ -29,7 +29,8 @@ export const useMessages = (chatId: string | null) => {
     uploadStatus: m.upload_status || 'done',
     timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     createdAt: m.created_at,
-    status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus
+    status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus,
+    is_ai: m.is_ai
   }), []);
 
   const fetchMessages = useCallback(async () => {
@@ -154,7 +155,7 @@ export const useMessages = (chatId: string | null) => {
   }, [chatId, mapMsg]);
 
   // ─── [101-160] Event Handlers ───────────────
-  const sendMessage = async (text: string, sId: string, cId: string, type: string = 'text', mData: any = null, mId?: string) => {
+  const sendMessage = async (text: string, sId: string, cId: string, type: string = 'text', mData: any = null, mId?: string, isAI: boolean = false) => {
     if (type === 'text' && (!text || !text.trim())) return;
 
     const payload: any = {
@@ -166,6 +167,7 @@ export const useMessages = (chatId: string | null) => {
       media_data: mData,
       status: 'sent',
       seen: false,
+      is_ai: isAI,
       created_at: new Date().toISOString()
     };
 

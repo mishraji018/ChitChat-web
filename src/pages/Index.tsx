@@ -45,12 +45,14 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           .from('chats')
           .select(`
             *,
-            participant1:users!participant1_id(*),
-            participant2:users!participant2_id(*),
+            participant1:users!chats_participant1_id_fkey(*),
+            participant2:users!chats_participant2_id_fkey(*),
             messages:messages(text, type, created_at, seen, status, sender_id)
           `)
           .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
           .order('created_at', { ascending: false });
+
+        console.log('[useChats] fetched chats:', data, error);
 
         if (error) throw error;
         
@@ -133,7 +135,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showNewChat, setShowNewChat] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [showContactInfo, setShowContactInfo] = useState(false);
@@ -187,10 +188,15 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark', 'theme-deep-blue', 'theme-rose');
+    
+    // Set data-theme for the new variable system
+    root.setAttribute('data-theme', currentTheme);
+
     if (currentTheme === 'dark') root.classList.add('dark');
     else if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
     else if (currentTheme === 'rose') root.classList.add('theme-rose');
     else root.classList.add('theme-light');
+    
     localStorage.setItem('blinkchat_theme', currentTheme);
   }, [currentTheme]);
 
@@ -364,7 +370,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       const existingLocal = chats.find((c: any) => c.user.id === user.id);
       if (existingLocal) {
         handleSelectChat(existingLocal.id);
-        setShowNewChat(false);
         return;
       }
 
@@ -424,7 +429,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     } catch (err) {
       console.error('Failed to start chat:', err);
     }
-    setShowNewChat(false);
   };
 
   const handleToggleMute = async (chatId: string) => {
@@ -487,12 +491,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       animate={{ opacity: 1 }}
       className="flex flex-col h-screen w-screen overflow-hidden bg-background font-display"
     >
-      <Header 
-        onOpenSettings={() => setShowSettings(true)}
-        onOpenAI={() => setShowAI(true)}
-        onSearch={setGlobalSearch}
-      />
-
       <div className="flex flex-1 overflow-hidden">
         {!isMobile && (
           <NavigationSidebar
@@ -542,10 +540,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                         selectedChatId={selectedChatId}
                         onSelectChat={handleSelectChat}
                         onOpenProfile={() => setMobileTab('profile')}
-                        onNewChat={() => setShowNewChat(true)}
+                        onNewChat={() => {}}
+                        onStartChat={handleStartChat}
                         onOpenNewGroup={() => setShowNewGroup(true)}
                         onLogout={onLogout}
                         onOpenSettings={() => setShowSettings(true)}
+                        onOpenAI={() => setShowAI(true)}
                         t={t}
                         currentUser={currentUser}
                         globalSearch={globalSearch}
@@ -630,6 +630,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     onOpenWallpaper={() => setShowWallpaperPicker(true)}
                     onAddToGroup={() => {}}
                     onReact={handleReact}
+                    allChats={chats}
                   />
                 ) : (
                   <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[#0f0f0f]">
@@ -651,10 +652,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   selectedChatId={selectedChatId}
                   onSelectChat={handleSelectChat}
                   onOpenProfile={() => setShowProfile(true)}
-                  onNewChat={() => setShowNewChat(true)}
+                  onNewChat={() => {}}
+                  onStartChat={handleStartChat}
                   onOpenNewGroup={() => setShowNewGroup(true)}
                   onLogout={onLogout}
                   onOpenSettings={() => setShowSettings(true)}
+                  onOpenAI={() => setShowAI(true)}
                   t={t}
                   currentUser={currentUser}
                   activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
@@ -667,7 +670,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       </div>
 
       <AnimatePresence>
-        {(showProfile || showSettings || showNewChat || showContactInfo) && (
+        {(showProfile || showSettings || showContactInfo) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -675,7 +678,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             onClick={() => {
               setShowProfile(false);
               setShowSettings(false);
-              setShowNewChat(false);
               setShowContactInfo(false);
             }}
             className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-30"
@@ -701,14 +703,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             language={language}
             onLanguageChange={onLanguageChange}
             currentUser={currentUser}
-          />
-        )}
-        {showNewChat && (
-          <NewChatPanel
-            onClose={() => setShowNewChat(false)}
-            onStartChat={handleStartChat}
-            currentUser={currentUser}
-            t={t}
           />
         )}
         {showCamera && (
@@ -764,6 +758,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           <AIAssistant 
             isOpen={showAI} 
             onClose={() => setShowAI(false)} 
+            chats={chats}
           />
         )}
       </AnimatePresence>

@@ -65,36 +65,36 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
   // ─── [61-148] Render ──────────────────────
   return (
     <>
-      <div onClick={onClick} onContextMenu={hCtx} className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer relative transition-all group mx-2 my-1 rounded-2xl ${isActive ? 'bg-[#1a1a1a] shadow-lg border border-white/5' : 'hover:bg-[#1a1a1a]/50'}`}>
+      <div onClick={onClick} onContextMenu={hCtx} className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer relative transition-all group mx-2 my-1 rounded-2xl ${isActive ? 'bg-[var(--bg-secondary)] shadow-lg border border-[var(--border-color)]' : 'hover:bg-[var(--bg-secondary)]/50'}`}>
         <div className="relative shrink-0">
           <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isO} className="w-12 h-12" />
-          {isO && <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0f0f0f]" />}
+          {isO && <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[var(--bg-primary)]" />}
         </div>
         
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-center mb-1">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <h3 className={`font-bold text-[14px] truncate ${isActive ? 'text-purple-400' : 'text-zinc-200'}`}>
+              <h3 className={`font-bold text-[14px] truncate ${isActive ? 'text-purple-400' : 'text-[var(--text-primary)]'}`}>
                 {nick}
               </h3>
-              {isMuted && <BellOff size={12} className="text-zinc-500 shrink-0" />}
+              {isMuted && <BellOff size={12} className="text-[var(--text-secondary)] shrink-0" />}
               {isPinned && <Pin size={12} className="text-purple-500 rotate-45 shrink-0" />}
             </div>
-            <span className={`text-[10px] shrink-0 font-medium ${uCount > 0 ? 'text-purple-400' : 'text-zinc-500'}`}>
+            <span className={`text-[10px] shrink-0 font-medium ${uCount > 0 ? 'text-purple-400' : 'text-[var(--text-secondary)]'}`}>
               {last?.timestamp || ''}
             </span>
           </div>
           
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-              {isMe && last && <span className={`text-[11px] font-bold ${last.status === 'seen' ? 'text-cyan-400' : 'text-zinc-600'}`}>{last.status === 'seen' ? '✓✓' : '✓'}</span>}
+              {isMe && last && <span className={`text-[11px] font-bold ${last.status === 'seen' ? 'text-cyan-400' : 'text-[var(--text-secondary)] opacity-60'}`}>{last.status === 'seen' ? '✓✓' : '✓'}</span>}
               {renderIcon()}
-              <span className="text-[12px] text-zinc-500 truncate font-medium">{getPText()}</span>
+              <span className="text-[12px] text-[var(--text-secondary)] truncate font-medium">{getPText()}</span>
             </div>
             <div className="flex items-center gap-1.5">
               {uCount > 0 && !isActive && <span className="bg-orange-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg shadow-orange-500/20">{uCount}</span>}
               {isPinned && !isActive && <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />}
-              <ChevronRight size={14} className="text-zinc-600 md:hidden" />
+              <ChevronRight size={14} className="text-[var(--text-secondary)] md:hidden" />
             </div>
           </div>
         </div>
@@ -106,7 +106,7 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
             initial={{ opacity: 0, scale: 0.95 }} 
             animate={{ opacity: 1, scale: 1 }} 
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed z-[100] bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl py-2 w-48 overflow-hidden backdrop-blur-xl" 
+            className="fixed z-[100] bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-2xl py-2 w-48 overflow-hidden backdrop-blur-xl" 
             style={{ top: mPos.y, left: mPos.x }}
           >
             {[
@@ -115,8 +115,8 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
               { label: 'Archive', icon: <FileText size={14} /> },
               { isSeparator: true },
               { label: 'Delete', icon: <Trash2Icon size={14} />, className: 'text-red-400' }
-            ].map((l: any, i) => l.isSeparator ? <div key={i} className="h-px bg-white/5 my-1" /> : (
-              <button key={i} className={`w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors ${l.className || 'text-zinc-300'}`}>
+            ].map((l: any, i) => l.isSeparator ? <div key={i} className="h-px border-b border-[var(--border-color)] my-1" /> : (
+              <button key={i} className={`w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 transition-colors ${l.className || 'text-[var(--text-primary)]'}`}>
                 {l.icon}
                 <span>{l.label} Chat</span>
               </button>
