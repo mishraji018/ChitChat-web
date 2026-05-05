@@ -32,6 +32,8 @@ import { useIndexedDB } from '@/hooks/useIndexedDB';
 import AIPanel from './AIPanel';
 import { toast } from 'sonner';
 import { toast as shadcnToast } from '@/components/ui/use-toast';
+import { useNetworkSpeed } from '@/hooks/useNetworkSpeed';
+import WifiSignalIcon from './WifiSignalIcon';
 
 interface ChatPanelProps {
   chat: Chat | null;
@@ -108,6 +110,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const { checkIfBoring } = useBoringDetector();
   const { addToQueue, getQueue } = useOfflineQueue();
   const { isOnline, wasOffline } = useNetworkStatus();
+  const { speed, ping, effectiveType } = useNetworkSpeed();
   const { uploadFile, getFileCategory } = useFileUpload();
   const { saveToIndexedDB } = useIndexedDB();
   const lastCheckedCount = useRef(0);
@@ -321,6 +324,12 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <div className="mr-1 group relative cursor-help" title={`Network: ${speed.charAt(0).toUpperCase() + speed.slice(1)} (${ping}ms)`}>
+                <WifiSignalIcon speed={speed} />
+                <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-[100] backdrop-blur-md border border-white/10">
+                  Network: {speed.charAt(0).toUpperCase() + speed.slice(1)} ({ping}ms)
+                </div>
+              </div>
               <MemoryCapsuleCreation chatId={chat.id} currentUserId={currentUser.id} /><MemoryCapsuleList chatId={chat.id} /><button onClick={onOpenSearch} className="p-2 text-[var(--text-secondary)] hover:text-purple-400 hover:bg-white/5 rounded-xl"><Search size={20} /></button>
               <div className="relative" ref={menuRef}><button onClick={() => setShowMenu(!showMenu)} className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded-xl"><MoreVertical size={20} /></button>
                 <AnimatePresence>{showMenu && <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }} className="absolute right-0 mt-2 w-60 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-2xl z-[100] py-2 overflow-hidden backdrop-blur-xl">
@@ -361,7 +370,15 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-1 chat-pattern scrollbar-thin z-10"
             style={{ background: currentWallpaper.bg }}
           >
-            {!isOnline && <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2">{getQueue().length > 0 ? `📵 Offline — ${getQueue().length} queued` : "📵 You're offline"}</div>}
+            {!isOnline ? (
+              <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2">
+                {getQueue().length > 0 ? `📵 Offline — ${getQueue().length} queued` : "📵 You're offline"}
+              </div>
+            ) : (speed === 'slow' || speed === 'offline') ? (
+              <div className="bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2 animate-pulse">
+                ⚠️ Weak network — messages may delay
+              </div>
+            ) : null}
             {wasOffline && isOnline && <div className="bg-green-500/20 border border-green-500/30 text-green-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2 animate-pulse">✅ Back online! Sending...</div>}
             <div ref={topObserverRef} className="h-4 flex items-center justify-center mb-4">{mLoading && <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />}</div>
             
