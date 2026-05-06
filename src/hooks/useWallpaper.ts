@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 export const WALLPAPERS = [
-  { id: 'default', name: 'Default', bg: '#0f0f0f', pattern: 'none' },
+  { id: 'default', name: 'Default', bg: '#18181b', pattern: 'none' },
   { id: 'purple', name: 'Purple', bg: 'linear-gradient(135deg, #1a0b2e, #0f0f0f)' },
   { id: 'blue', name: 'Ocean', bg: 'linear-gradient(135deg, #0a1628, #0f0f0f)' },
   { id: 'green', name: 'Forest', bg: 'linear-gradient(135deg, #0a1f0a, #0f0f0f)' },

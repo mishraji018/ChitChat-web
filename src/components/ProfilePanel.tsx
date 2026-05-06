@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/config/supabase';
 import { User as UserType } from '@/types';
+import { Camera, Loader2, Trash2 } from 'lucide-react';
+import { uploadAvatarToStorage, generateRandomAvatarColor } from '@/lib/avatar';
+import { toast } from 'sonner';
 
 interface ProfilePanelProps {
   isOpen: boolean;
@@ -14,6 +17,8 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
   const [bio, setBio] = useState(user?.status || 'Available');
   const [isEditing, setIsEditing] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('blinkchat_theme') || 'dark');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync theme with document
   useEffect(() => {
@@ -35,8 +40,58 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
       
       if (error) throw error;
       setIsEditing(false);
+      user.status = bio; // Update local state
     } catch (err) {
       console.error('Failed to update bio:', err);
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      
+      const avatarUrl = await uploadAvatarToStorage(file, user.id);
+      
+      const { error } = await supabase
+        .from('users')
+        .update({ avatar_url: avatarUrl })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      
+      user.avatar = avatarUrl;
+      toast.success('Profile photo updated!');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update photo');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    try {
+      setIsUploading(true);
+      const newColor = user.avatarColor || generateRandomAvatarColor();
+      const { error } = await supabase
+        .from('users')
+        .update({ avatar_url: null, avatar_color: newColor })
+        .eq('id', user.id);
+
+      if (error) throw error;
+      
+      user.avatar = undefined;
+      user.avatarColor = newColor;
+      toast.success('Profile photo removed');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove photo');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -70,15 +125,46 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
         <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-none">
           {/* Avatar & Name */}
           <div className="flex flex-col items-center text-center space-y-4">
-            <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-700 p-1 shadow-xl">
-              <div className="w-full h-full rounded-[1.4rem] overflow-hidden bg-[#1a1a1a] flex items-center justify-center">
-                {user?.avatar ? (
+            <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-700 p-1 shadow-xl group">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/jpeg,image/png,image/webp" 
+                onChange={handleFileSelect} 
+              />
+              <button 
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-full rounded-[1.4rem] overflow-hidden bg-[#1a1a1a] flex items-center justify-center relative cursor-pointer"
+                style={{ backgroundColor: !user?.avatar ? user?.avatarColor : undefined }}
+              >
+                {isUploading ? (
+                  <Loader2 className="h-8 w-8 text-white animate-spin" />
+                ) : user?.avatar ? (
                   <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-4xl font-bold text-white">{(user?.displayName || user?.username || user?.email || '?')[0].toUpperCase()}</span>
                 )}
-              </div>
+                
+                {/* Overlay on hover */}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center">
+                  <Camera className="h-6 w-6 text-white mb-1" />
+                  <span className="text-[9px] font-bold text-white uppercase tracking-wider">Change</span>
+                </div>
+              </button>
             </div>
+            
+            {user?.avatar && (
+              <button 
+                onClick={handleRemovePhoto} 
+                disabled={isUploading}
+                className="flex items-center gap-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 transition-colors"
+              >
+                <Trash2 size={14} /> Remove photo
+              </button>
+            )}
+
             <div>
               <h3 className="text-2xl font-black text-white tracking-tight">{user?.displayName || user?.username || 'User'}</h3>
               <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>

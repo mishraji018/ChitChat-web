@@ -12,6 +12,7 @@ import { syncGoogleAuth, completeGoogleSignup } from "@/services/authService";
 import { useLanguage } from "@/hooks/use-language";
 import { useInternet } from '@/hooks/use-internet';
 import NoInternet from '@/components/NoInternet';
+import { uploadAvatarToStorage } from '@/lib/avatar';
 
 const queryClient = new QueryClient();
 
@@ -75,20 +76,27 @@ const App = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleUsernameComplete = async (username: string) => {
+  const handleUsernameComplete = async (data: { username: string; avatarFile: File | null; avatarColor: string }) => {
+    const { username, avatarFile, avatarColor } = data;
     setLoading(true);
     try {
+      let avatarUrl = null;
+      if (avatarFile && tempAuthUser?.id) {
+        avatarUrl = await uploadAvatarToStorage(avatarFile, tempAuthUser.id);
+      }
+
       const newUser = {
         id: tempAuthUser.id,
         email: tempAuthUser.email,
         username,
         display_name: tempAuthUser.user_metadata.full_name || username,
-        avatar_url: tempAuthUser.user_metadata.avatar_url,
+        avatar_url: avatarUrl || tempAuthUser.user_metadata.avatar_url,
+        avatar_color: avatarColor,
         is_online: true,
         last_seen: new Date().toISOString()
       };
 
-      const { data, error } = await supabase
+      const { data: userData, error } = await supabase
         .from('users')
         .insert(newUser)
         .select()
@@ -97,15 +105,15 @@ const App = () => {
       if (error) throw error;
 
       setCurrentUser({
-        id: data.id,
-        username: data.username,
-        displayName: data.display_name,
-        avatar: data.avatar_url,
-        avatarColor: data.avatar_color || '#3b82f6',
-        status: data.bio || 'Available',
+        id: userData.id,
+        username: userData.username,
+        displayName: userData.display_name,
+        avatar: userData.avatar_url,
+        avatarColor: userData.avatar_color || avatarColor,
+        status: userData.bio || 'Available',
         isOnline: true,
-        lastSeen: data.last_seen,
-        email: data.email
+        lastSeen: userData.last_seen,
+        email: userData.email
       });
       setIsLoggedIn(true);
       setShowUsernameScreen(false);
