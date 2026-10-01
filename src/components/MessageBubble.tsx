@@ -27,6 +27,7 @@ interface Props {
   isHighlighted?: boolean; 
   onReact?: (emoji: string) => void;
   onReply?: (message: Message) => void;
+  onScrollToMessage?: (messageId: string) => void;
   isLatestSentMessage?: boolean;
 }
 
@@ -39,12 +40,12 @@ const MessageBubble = ({
   isHighlighted = false, 
   onReact,
   onReply,
+  onScrollToMessage,
   isLatestSentMessage = false
 }: Props) => {
   // ─── [1-15] Helpers ───────────────────────
   const safeT = t || translations['English'];
   const mContent = message.content || (message as any).text || '';
-  console.log('[bubble] status:', message.status, 'isSent:', isSent);
 
   if (!mContent && !message.mediaUrl) return null;
 
@@ -79,6 +80,43 @@ const MessageBubble = ({
     );
   };
 
+  // ─── Reply Quote Preview Strip (WhatsApp/Telegram style) ──────
+  const ReplyPreview = () => {
+    if (!message.replyToMessage) return null;
+    const { id: replyId, senderName, text } = message.replyToMessage;
+
+    return (
+      <button
+        type="button"
+        onClick={() => replyId && onScrollToMessage?.(replyId)}
+        className={`
+          w-full text-left mb-2 flex overflow-hidden rounded-xl cursor-pointer
+          transition-opacity hover:opacity-80 active:opacity-70
+          ${isSent
+            ? 'bg-black/20 border border-white/10'
+            : 'bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10'
+          }
+        `}
+      >
+        {/* Left accent bar */}
+        <div className={`w-[3px] shrink-0 rounded-l-xl ${isSent ? 'bg-white/70' : 'bg-emerald-500'}`} />
+        {/* Content */}
+        <div className="flex-1 min-w-0 px-2.5 py-1.5">
+          <p className={`text-[11px] font-bold leading-tight mb-0.5 ${
+            isSent ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'
+          }`}>
+            {senderName || 'Reply'}
+          </p>
+          <p className={`text-[11px] leading-tight truncate ${
+            isSent ? 'text-white/65' : 'text-[var(--text-secondary)]'
+          }`}>
+            {text || 'Attachment'}
+          </p>
+        </div>
+      </button>
+    );
+  };
+
   // ─── [16-160] Render Logic ────────────────
   const render = () => {
     const { uploadStatus: stat, mediaUrl: url, type, mediaName: name, mediaSize: sz, mediaData: dat } = message;
@@ -105,38 +143,68 @@ const MessageBubble = ({
       case 'document': return <div className="relative">{(up || q || err) && <Status />}<a href={mUrl} download={name} target="_blank" rel="noreferrer" className={`flex items-center gap-3 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded-xl p-3 min-w-[220px] transition-all border border-purple-500/20 ${up || q || err ? 'blur-[1px]' : ''}`}><div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-xl">📄</div><div className="flex-1 min-w-0"><p className="text-sm font-medium truncate text-[var(--text-primary)]">{name || message.fileName || 'Document'}</p><p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase">{fSize(sz || 0)}</p></div><Download size={18} className="text-purple-400" /></a></div>;
       default: return (
         <div>
-          {message.replyToMessage && (
-            <div className={`mb-2 p-2.5 rounded-xl text-xs border-l-4 transition-all ${
-              isSent 
-                ? 'bg-black/20 border-white/90 text-white' 
-                : 'bg-black/10 dark:bg-white/10 border-emerald-500 text-[var(--bubble-received-text)] shadow-sm'
-            }`}>
-              <p className={`font-bold ${isSent ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {message.replyToMessage.senderName || 'Replied'}
-              </p>
-              <p className="truncate opacity-90 mt-0.5">{message.replyToMessage.text}</p>
-            </div>
+          <ReplyPreview />
+          {isEmoji ? (
+            <span className="text-5xl block py-2">{mContent}</span>
+          ) : (
+            // WhatsApp inline-float timestamp trick:
+            // The trailing span with float:right sits at end of last text line
+            // (or drops to its own mini-line) WITHOUT expanding bubble width.
+            <p className="text-sm leading-snug break-words whitespace-pre-wrap">
+              {searchQuery ? highlight(mContent, searchQuery) : mContent}
+              {/* Inline trailing timestamp — floats to bottom-right of text */}
+              <span
+                className={`
+                  inline-flex items-center gap-0.5 float-right
+                  ml-2 mt-0.5 text-[10px] whitespace-nowrap align-bottom
+                  ${isSent ? 'text-white/60' : 'text-[var(--text-secondary)]'}
+                `}
+              >
+                {message.isEdited && <span className="italic mr-0.5">edited</span>}
+                {message.timestamp}
+                {isSent && (
+                  message.status === 'seen'
+                    ? <span className="ml-0.5 font-bold text-cyan-400">
+                        ✓✓{isLatestSentMessage && <span className="ml-0.5 text-[9px]">Seen</span>}
+                      </span>
+                    : message.status === 'delivered'
+                      ? <span className="ml-0.5 font-bold opacity-70">✓✓</span>
+                      : <span className="ml-0.5 opacity-70">✓</span>
+                )}
+              </span>
+            </p>
           )}
-          <p className={`${isEmoji ? 'text-5xl py-2' : 'text-sm'} leading-relaxed break-words whitespace-pre-wrap`}>
-            {searchQuery ? highlight(mContent, searchQuery) : mContent}
-          </p>
         </div>
       );
     }
   };
 
   // ─── [161-273] Final Render ───────────────
-
   return (
-    <motion.div initial={isSent ? { opacity: 0, x: 20 } : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className={`flex w-full mb-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+    <motion.div
+      data-message-id={message.id}
+      initial={isSent ? { opacity: 0, x: 20 } : { opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'}`}
+    >
       <ContextMenu>
-        <ContextMenuTrigger className="max-w-[85%] md:max-w-[75%]">
-          <div className={`px-6 py-3.5 rounded-[2rem] relative transition-all active:scale-[0.98] ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-[var(--bg-primary)]' : ''} ${isEmoji ? 'bg-transparent shadow-none' : isSent ? 'bg-gradient-to-br from-[var(--bubble-sent-from)] to-[var(--bubble-sent-to)] text-[var(--bubble-sent-text,white)] rounded-br-sm shadow-md bubble-sent-override' : 'bg-[var(--bubble-received)] text-[var(--bubble-received-text)] border border-[var(--border-color)] rounded-bl-sm shadow-sm bubble-received-override'}`}>
+        <ContextMenuTrigger className="max-w-[70%]">
+          <div className={`
+            px-3 py-1.5 rounded-[1.25rem] relative transition-all active:scale-[0.98] overflow-hidden
+            ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-[var(--bg-primary)]' : ''}
+            ${isEmoji
+              ? 'bg-transparent shadow-none px-0 py-0'
+              : isSent
+                ? 'bg-gradient-to-br from-[var(--bubble-sent-from)] to-[var(--bubble-sent-to)] text-[var(--bubble-sent-text,white)] rounded-br-sm shadow-md bubble-sent-override'
+                : 'bg-[var(--bubble-received)] text-[var(--bubble-received-text)] border border-[var(--border-color)] rounded-bl-sm shadow-sm bubble-received-override'
+            }
+          `}>
             {render()}
-            {!isEmoji && (
-              <div className={`flex items-center justify-end gap-1.5 mt-1 timestamp-text ${isSent ? 'text-white/60' : 'text-[var(--text-secondary)]'}`}>
-                {message.isEdited && <span className="text-[9px] italic mr-1">edited</span>}
-                <span className="text-[10px] font-medium">{message.timestamp}</span>
+            {/* For media/non-text types: show small timestamp below (text type handles it inline above) */}
+            {!isEmoji && message.type !== 'text' && message.type !== 'sticker' && (
+              <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${isSent ? 'text-white/60' : 'text-[var(--text-secondary)]'}`}>
+                {message.isEdited && <span className="italic mr-0.5">edited</span>}
+                <span>{message.timestamp}</span>
                 {renderStatus()}
               </div>
             )}

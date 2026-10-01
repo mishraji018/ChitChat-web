@@ -36,30 +36,33 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     is_ai: m.is_ai
   }), []);
 
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async (isBackground = false) => {
     if (!chatId) return;
-    setLoading(true);
-    
+    if (!isBackground) setLoading(true);
+
     // Safety timeout: if loading takes more than 5s, stop spinner
-    const timeoutId = setTimeout(() => setLoading(false), 5000);
-    
+    const timeoutId = !isBackground ? setTimeout(() => setLoading(false), 5000) : null;
+
     try {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('chat_id', chatId)
         .order('created_at', { ascending: true });
-      
-      console.log('[fetch] data:', data, 'error:', error);
+
       if (error) {
         console.error('[useMessages] Fetch error:', error);
       } else {
         const mapped = data?.map(mapMsg) || [];
         setMessages(prev => {
-          // If server returned messages, use them
+          // If server returned messages, merge them preserving any pending optimistic messages
           if (mapped.length > 0) {
-            localStorage.setItem(`messages_${chatId}`, JSON.stringify(mapped));
-            return mapped;
+            const pendingOptimistic = prev.filter(m => m.status === 'sending');
+            const serverIds = new Set(mapped.map(m => m.id));
+            const stillPending = pendingOptimistic.filter(m => !serverIds.has(m.id));
+            const merged = [...mapped, ...stillPending];
+            localStorage.setItem(`messages_${chatId}`, JSON.stringify(merged));
+            return merged;
           }
           // If server returned 0 messages but we already have preloaded/optimistic messages, don't wipe them!
           if (prev.length > 0) {
@@ -71,12 +74,12 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     } catch (err) {
       console.error('[useMessages] unexpected error:', err);
     } finally {
-      clearTimeout(timeoutId);
-      setLoading(false);
+      if (timeoutId) clearTimeout(timeoutId);
+      if (!isBackground) setLoading(false);
     }
   }, [chatId, mapMsg]);
 
-  // ─── [11-50] Effect: Initial Fetch ────────
+  // ─── [11-50] Effect: Initial Fetch & Polling Fallback ────────
   useEffect(() => {
     if (!chatId) {
       setMessages([]);
@@ -101,8 +104,15 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
       }
     }
 
-    // 2. Always fetch fresh messages from Supabase
+    // 2. Fetch fresh messages immediately
     fetchMessages();
+
+    // 3. Fallback Polling every 2s in background (critical when Supabase Realtime channel is CLOSED)
+    const pollInterval = setInterval(() => {
+      fetchMessages(true);
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
   }, [chatId, fetchMessages]);
 
   // ─── [51-100] Effect: Realtime Sub ────────
@@ -118,11 +128,11 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     // Set up subscription
     channelRef.current = supabase
       .channel(`messages_${chatId}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages', 
-        filter: `chat_id=eq.${chatId}` 
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `chat_id=eq.${chatId}`
       }, (p) => {
         console.log('[REALTIME] INSERT received:', p.new);
         if (!p.new) return;
@@ -136,19 +146,19 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
           return next;
         });
       })
-      .on('postgres_changes', { 
-        event: 'UPDATE', 
-        schema: 'public', 
-        table: 'messages', 
-        filter: `chat_id=eq.${chatId}` 
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'messages',
+        filter: `chat_id=eq.${chatId}`
       }, (p) => {
         console.log('[REALTIME UPDATE]', p.new.id, p.new.status);
         const up = p.new;
         setMessages(prev => {
-          const next = prev.map(m => m.id === up.id ? { 
-            ...m, 
+          const next = prev.map(m => m.id === up.id ? {
+            ...m,
             status: up.status as MessageStatus,
-            seen: up.seen 
+            seen: up.seen
           } : m);
           localStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
           return next;
@@ -176,12 +186,12 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
 
   // ─── [101-160] Event Handlers ───────────────
   const sendMessage = async (
-    text: string, 
-    sId: string, 
-    cId: string, 
-    type: string = 'text', 
-    mData: any = null, 
-    mId?: string, 
+    text: string,
+    sId: string,
+    cId: string,
+    type: string = 'text',
+    mData: any = null,
+    mId?: string,
     isAI: boolean = false,
     replyTo?: { id: string; senderName?: string; text: string } | null
   ) => {
@@ -290,7 +300,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         .neq('sender_id', uId)
         .in('status', ['sent', 'delivered'])
         .select();
-      
+
       console.log('[markAsRead] updated:', data, 'error:', error);
       if (error) throw error;
     } catch (err) {

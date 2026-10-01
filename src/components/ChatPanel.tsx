@@ -56,6 +56,7 @@ interface ChatPanelProps {
   onOpenWallpaper?: () => void;
   onReact?: (chatId: string, messageId: string, emoji: string) => void;
   allChats?: Chat[];
+  onlineUsers?: string[];
 }
 
 const TypingIndicator = () => (
@@ -73,7 +74,7 @@ const TypingIndicator = () => (
   </div>
 );
 
-const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, onOpenSearch, showSearch, onCloseSearch, onToggleMute, onTogglePin, onToggleArchive, onToggleBlock, onDeleteChat, onReportChat, onAddToGroup, onOpenWallpaper, onReact, allChats = [] }: ChatPanelProps) => {
+const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, onOpenSearch, showSearch, onCloseSearch, onToggleMute, onTogglePin, onToggleArchive, onToggleBlock, onDeleteChat, onReportChat, onAddToGroup, onOpenWallpaper, onReact, allChats = [], onlineUsers: propOnlineUsers = [] }: ChatPanelProps) => {
   // ─── [1-45] State & Refs ──────────────────
   const [isBlocked, setIsBlocked] = useLocalStorage(`blocked_${chat?.user.id}`, false);
   const [nickname] = useLocalStorage(`nickname_${chat?.user.id}`, chat?.user.displayName || '');
@@ -96,6 +97,8 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [inputText, setInputText] = useState('');
   const [replyMessage, setReplyMessage] = useState<{ id: string; senderName?: string; text: string } | null>(null);
+  const [latestLastSeen, setLatestLastSeen] = useState<string | null>(chat?.user.lastSeen || null);
+  const [, setTimeTick] = useState(0);
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -105,7 +108,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
   // ─── [46-75] Hooks ────────────────────────
   const { messages, sendMessage, markAsRead, markAsDelivered, addReaction, loading: mLoading, setMessages } = useMessages(chat?.id || null, chat?.messages || []);
-  const { onlineUsers } = usePresence(currentUser.id);
+  const activeOnlineUsers = propOnlineUsers;
   const { isTyping: isRecTyping, handleTyping } = useTyping(chat?.id || null, currentUser.id);
   const { streak, updateStreak, justBroken } = useStreak(currentUser.id, chat?.user.id || '');
   const { checkIfBoring } = useBoringDetector();
@@ -116,13 +119,43 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const { saveToIndexedDB } = useIndexedDB();
   const lastCheckedCount = useRef(0);
 
+  // Sync latestLastSeen when chat prop changes
+  useEffect(() => {
+    if (chat?.user.lastSeen) {
+      setLatestLastSeen(chat.user.lastSeen);
+    }
+  }, [chat?.user.lastSeen]);
+
+  // Realtime ticker: update relative time ("just now", "1 min ago", "2 mins ago") every 15 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeTick(t => t + 1);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch fresh last_seen from DB when contact goes offline
+  useEffect(() => {
+    if (!chat?.user.id) return;
+    const fetchLastSeen = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('last_seen')
+        .eq('id', chat.user.id)
+        .maybeSingle();
+      if (data?.last_seen) {
+        setLatestLastSeen(data.last_seen);
+      }
+    };
+    fetchLastSeen();
+  }, [chat?.user.id, activeOnlineUsers]);
+
   // ─── [76-130] Effects & Helpers ───────────
   const scroll = (b: ScrollBehavior = 'smooth') => messagesEndRef.current?.scrollIntoView({ behavior: b });
 
   useEffect(() => {
     if (chat?.messages && chat.messages.length > 0) {
       setMessages(prev => {
-        // Merge chat.messages into local state if there are any missing messages
         const existingIds = new Set(prev.map(m => m.id));
         const newOnes = chat.messages.filter(m => !existingIds.has(m.id));
         if (newOnes.length > 0) {
@@ -142,51 +175,38 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
   useEffect(() => {
     if (chat?.id && currentUser?.id) {
-      console.log('[markAsRead] calling for chat:', chat.id, 'user:', currentUser.id);
       markAsRead(chat.id, currentUser.id);
       markAsDelivered(chat.id, currentUser.id);
     }
-  }, [chat?.id, currentUser.id, messages.length]);
+  }, [chat?.id, currentUser?.id, messages.length]);
 
   useEffect(() => {
     if (justBroken) shadcnToast({ title: "💔 Streak ended!", variant: "destructive" });
   }, [justBroken]);
 
-  useEffect(() => {
-    (async () => {
-      if (messages.length > 0 && messages.length % 10 === 0 && messages.length !== lastCheckedCount.current) {
-        lastCheckedCount.current = messages.length;
-        const res = await checkIfBoring(messages, currentUser.id);
-        if (res && res.boringScore > 65) {
-          toast.custom((id) => (
-            <div className="w-[350px] bg-gradient-to-br from-[#1a0b2e] to-[#0a0a0a] border border-purple-500/30 p-5 rounded-2xl shadow-2xl backdrop-blur-xl flex flex-col gap-4">
-              <div className="flex items-start gap-3">
-                <div className="text-2xl">{res.emoji}</div>
-                <div className="flex-1"><p className="text-zinc-100 font-medium text-sm">😴 Chat feels quiet...</p><p className="text-purple-300 text-xs mt-1 italic">{res.suggestion}</p></div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => toast.dismiss(id)} className="flex-1 py-2 bg-purple-600 text-white text-[11px] font-bold rounded-lg">Try it! 🙌</button>
-                <button onClick={() => toast.dismiss(id)} className="flex-1 py-2 bg-white/5 text-zinc-400 text-[11px] font-medium rounded-lg">Fine 😅</button>
-              </div>
-            </div>
-          ), { duration: 8000 });
-        }
-      }
-    })();
-  }, [messages.length, currentUser.id, checkIfBoring]);
-
-  const isContactOnline = chat ? onlineUsers.includes(chat.user.id) : false;
+  const isContactOnline = chat ? (activeOnlineUsers.includes(chat.user.id) || chat.user.isOnline) : false;
   
-  const formatLS = (d: string) => {
+  const formatLS = (d: string | null) => {
     if (!d) return 'Offline';
-    const date = new Date(d), now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 60000);
-    if (diff < 1) return 'Last seen just now';
-    if (diff < 60) return `Last seen ${diff} min${diff > 1 ? 's' : ''} ago`;
-    return date.toDateString() === now.toDateString() ? `Last seen today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `Last seen on ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const date = new Date(d);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'Online';
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+
+    if (diffSec < 45) return 'Last seen just now';
+    if (diffMin === 1) return 'Last seen 1 min ago';
+    if (diffMin < 60) return `Last seen ${diffMin} mins ago`;
+    if (diffHour === 1) return 'Last seen 1 hr ago';
+    if (diffHour < 24) return `Last seen ${diffHour} hrs ago`;
+    return date.toDateString() === now.toDateString() 
+      ? `Last seen today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` 
+      : `Last seen on ${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   };
 
-  const statusText = isRecTyping ? 'typing...' : isContactOnline ? 'Online' : formatLS(chat?.user.lastSeen || '');
+  const statusText = isRecTyping ? 'typing...' : isContactOnline ? 'Online' : formatLS(latestLastSeen);
   const safeT = t || translations['English'];
 
   const REPORT_REASONS = ["Spam", "Harassment", "Fake Account", "Inappropriate Content", "Other"];
@@ -361,7 +381,9 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                     {isMuted && <BellOff size={12} className="text-[var(--text-secondary)]" />}
                     {streak >= 2 && <span className={`text-sm font-bold flex items-center gap-1 ${streak >= 30 ? 'text-yellow-400 animate-pulse' : streak >= 7 ? 'text-yellow-400' : 'text-orange-400'}`}>{streak >= 30 ? '🔥🔥🔥' : streak >= 7 ? '🔥🔥' : '🔥'} {streak}</span>}
                   </div>
-                  <span className={`text-[11px] font-medium ${isRecTyping ? 'text-purple-400' : 'text-[var(--text-secondary)]'} flex items-center gap-1`}>{isContactOnline && !isRecTyping && !isBlocked && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}{!isBlocked ? statusText : 'Offline'}</span>
+                  <span className={`text-[11px] font-medium ${isRecTyping ? 'text-purple-400' : isContactOnline ? 'text-emerald-500 font-semibold' : 'text-[var(--text-secondary)]'}`}>
+                    {!isBlocked ? statusText : 'Offline'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -409,7 +431,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
           <div 
             ref={containerRef} 
             onScroll={onScroll} 
-            className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-1 chat-pattern scrollbar-thin z-10"
+            className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col chat-pattern scrollbar-thin z-10"
             style={{ background: currentWallpaper.id === 'default' ? 'transparent' : currentWallpaper.bg }}
           >
             {!isOnline ? (
@@ -458,28 +480,42 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
 
                   const enrichedMsg = resolvedReply ? { ...m, replyToMessage: resolvedReply } : m;
 
+                  // Sender-aware gap: tight between same-sender, roomier on sender switch
+                  const nextMsg = messages[i + 1];
+                  const isSameSenderAsNext = nextMsg && nextMsg.senderId === m.senderId;
+                  const gapClass = isSameSenderAsNext ? 'mb-0.5' : 'mb-2';
+
                   return (
-                    <MessageBubble 
-                      key={m.id} 
-                      message={enrichedMsg} 
-                      isSent={m.senderId === currentUser.id} 
-                      t={t} 
-                      currentUser={currentUser} 
-                      searchQuery={searchQuery} 
-                      isHighlighted={searchResults[currentMatch] === i} 
-                      onReact={(emoji) => {
-                        addReaction(m.id, emoji, currentUser.id);
-                        if (onReact) onReact(chat.id, m.id, emoji);
-                      }} 
-                      onReply={(targetMsg) => {
-                        setReplyMessage({
-                          id: targetMsg.id,
-                          senderName: targetMsg.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
-                          text: targetMsg.content || targetMsg.text || 'Attachment'
-                        });
-                      }} 
-                      isLatestSentMessage={i === lastSentIndex}
-                    />
+                    <div key={m.id} className={gapClass}>
+                      <MessageBubble 
+                        message={enrichedMsg} 
+                        isSent={m.senderId === currentUser.id} 
+                        t={t} 
+                        currentUser={currentUser} 
+                        searchQuery={searchQuery} 
+                        isHighlighted={searchResults[currentMatch] === i} 
+                        onReact={(emoji) => {
+                          addReaction(m.id, emoji, currentUser.id);
+                          if (onReact) onReact(chat.id, m.id, emoji);
+                        }} 
+                        onReply={(targetMsg) => {
+                          setReplyMessage({
+                            id: targetMsg.id,
+                            senderName: targetMsg.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
+                            text: targetMsg.content || targetMsg.text || 'Attachment'
+                          });
+                        }}
+                        onScrollToMessage={(msgId) => {
+                          const el = containerRef.current?.querySelector(`[data-message-id="${msgId}"]`) as HTMLElement | null;
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            el.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-[var(--bg-primary)]', 'transition-all');
+                            setTimeout(() => el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-[var(--bg-primary)]'), 1500);
+                          }
+                        }}
+                        isLatestSentMessage={i === lastSentIndex}
+                      />
+                    </div>
                   );
                 });
               })()

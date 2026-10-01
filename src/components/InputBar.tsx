@@ -185,7 +185,6 @@ const InputBar = ({
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{!isRecipientOnline && !disabled && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="offline-banner bg-purple-500/10 text-[11px] text-purple-300 py-1.5 px-4 mb-3 rounded-full border border-purple-500/20">Recipient is offline. Messages queued.</motion.div>}</AnimatePresence>
       
       <input type="file" ref={fileRef} className="hidden" onChange={onFile} accept="*/*" />
       

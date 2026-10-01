@@ -32,30 +32,40 @@ interface IndexProps {
 const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguageChange }: IndexProps) => {
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<MobileTab>('chats');
-  const [chats, setChats] = useState<any[]>([]);
+  const [chats, setChats] = useState<any[]>(() => {
+    if (currentUser?.id) {
+      const cached = localStorage.getItem(`chats_${currentUser.id}`);
+      if (cached) {
+        try { return JSON.parse(cached) || []; } catch {}
+      }
+    }
+    return [];
+  });
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   
-  useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('chats')
-          .select(`
-            *,
-            participant1:users!chats_participant1_id_fkey(*),
-            participant2:users!chats_participant2_id_fkey(*),
-            messages:messages(id, text, type, created_at, seen, status, sender_id)
-          `)
-          .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
-          .order('created_at', { ascending: false });
+  const fetchConversations = useCallback(async () => {
+    if (!currentUser?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select(`
+          *,
+          participant1:users!chats_participant1_id_fkey(*),
+          participant2:users!chats_participant2_id_fkey(*),
+          messages:messages(id, text, type, created_at, seen, status, sender_id)
+        `)
+        .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false });
 
-        console.log('[useChats] fetched chats:', data, error);
+      console.log('[useChats] fetched chats:', data, error);
 
-        if (error) throw error;
-        
-        if (data) {
-          const mappedChats = data.map((conv: any) => {
+      if (error) throw error;
+      
+      if (data) {
+        const rawMappedChats = data
+          .map((conv: any) => {
             const otherParticipant = conv.participant1_id === currentUser.id ? conv.participant2 : conv.participant1;
+            if (!otherParticipant) return null;
             
             // Get the last message — sort by created_at descending and pick first
             const sortedMsgs = (conv.messages || []).sort(
@@ -74,17 +84,19 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 type: m.type || 'text',
                 timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 createdAt: m.created_at,
-                status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus
+                status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus,
+                replyTo: m.reply_to,
+                replyToMessage: m.reply_to_message
               }));
 
             return {
               id: conv.id,
               user: {
                 id: otherParticipant.id,
-                username: otherParticipant.username || otherParticipant.name?.toLowerCase(),
+                username: otherParticipant.username || otherParticipant.name?.toLowerCase() || 'user',
                 displayName: otherParticipant.display_name || otherParticipant.name || 'User',
                 avatar: otherParticipant.avatar_url || otherParticipant.avatar,
-                avatarColor: '#ff4500',
+                avatarColor: otherParticipant.avatar_color || '#ff4500',
                 isOnline: false, // Will be updated by presence
                 lastSeen: otherParticipant.last_seen
               },
@@ -104,45 +116,232 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               isArchived: false,
               lastMessageAt: lastMsg ? lastMsg.created_at : conv.created_at,
             };
-          });
+          })
+          .filter(Boolean);
 
-          setChats(mappedChats);
+        // Deduplicate conversations by participant user ID to avoid duplicate chat rows
+        const uniqueChatsMap = new Map<string, any>();
+        for (const chat of rawMappedChats) {
+          if (!chat) continue;
+          const otherUserId = chat.user.id;
+          if (!uniqueChatsMap.has(otherUserId)) {
+            uniqueChatsMap.set(otherUserId, chat);
+          } else {
+            // If already present, merge messages and take whichever has latest activity
+            const existing = uniqueChatsMap.get(otherUserId);
+            const mergedMsgs = [...existing.messages, ...chat.messages].sort(
+              (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+            );
+            const dedupedMsgs = Array.from(new Map(mergedMsgs.map(m => [m.id, m])).values());
+            const latestMsg = dedupedMsgs.length > 0 ? dedupedMsgs[dedupedMsgs.length - 1] : existing.lastMessage;
+            
+            // Prefer the chat that has messages
+            if (chat.messages.length > existing.messages.length) {
+              uniqueChatsMap.set(otherUserId, {
+                ...chat,
+                messages: dedupedMsgs,
+                lastMessage: latestMsg
+              });
+            } else {
+              uniqueChatsMap.set(otherUserId, {
+                ...existing,
+                messages: dedupedMsgs,
+                lastMessage: latestMsg
+              });
+            }
+          }
         }
-      } catch (err) {
-        console.error('Failed to fetch conversations from Supabase:', err);
-      }
-    };
+        const mappedChats = Array.from(uniqueChatsMap.values()).map((c: any) => ({
+          ...c,
+          user: {
+            ...c.user,
+            isOnline: onlineUsers.includes(c.user.id)
+          }
+        }));
 
-    if (currentUser) {
-      fetchConversations();
+        localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(mappedChats));
+        setChats(mappedChats);
+      }
+    } catch (err) {
+      console.error('Failed to fetch conversations from Supabase:', err);
     }
-  }, [currentUser]);
+  }, [currentUser?.id, onlineUsers]);
+
+  useEffect(() => {
+    // 1. Instantly load from cache if available
+    if (currentUser?.id) {
+      const cachedChats = localStorage.getItem(`chats_${currentUser.id}`);
+      if (cachedChats) {
+        try {
+          const parsed = JSON.parse(cachedChats);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setChats(parsed);
+          }
+        } catch (e) {
+          console.error('Cache load error:', e);
+        }
+      }
+    }
+    // 2. Fetch fresh from DB
+    fetchConversations();
+  }, [currentUser?.id, fetchConversations]);
 
   useEffect(() => {
     if (!currentUser || !currentUser.id) return;
 
     // Supabase Presence for online status
-    const channel = supabase.channel('online-users')
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const onlineIds = Object.values(state)
-          .flat()
-          .map((p: any) => p.user_id);
-        setOnlineUsers(onlineIds);
+    const channel = supabase.channel('online-users', {
+      config: { presence: { key: currentUser.id } }
+    });
+
+    const updatePresenceState = () => {
+      const state = channel.presenceState();
+      const onlineIds = new Set<string>();
+      Object.values(state).forEach((presences: any) => {
+        presences.forEach((p: any) => {
+          if (p.user_id) onlineIds.add(p.user_id);
+        });
+      });
+      setOnlineUsers(Array.from(onlineIds));
+    };
+
+    const trackPresence = async () => {
+      await channel.track({
+        user_id: currentUser.id,
+        online_at: new Date().toISOString(),
+      });
+    };
+
+    const updateLastSeen = () => {
+      supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id)
+        .then(() => {});
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, updatePresenceState)
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        setOnlineUsers(prev => {
+          const next = new Set(prev);
+          newPresences.forEach((p: any) => {
+            if (p.user_id) next.add(p.user_id);
+          });
+          return Array.from(next);
+        });
+      })
+      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        setOnlineUsers(prev => {
+          const next = new Set(prev);
+          leftPresences.forEach((p: any) => {
+            if (p.user_id) next.delete(p.user_id);
+          });
+          return Array.from(next);
+        });
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({
-            user_id: currentUser.id,
-            online_at: new Date().toISOString(),
-          });
+          await trackPresence();
         }
       });
 
+    const handleBeforeUnload = () => {
+      updateLastSeen();
+      channel.untrack();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      channel.untrack();
+      updateLastSeen();
       supabase.removeChannel(channel);
     };
   }, [currentUser?.id]);
+
+  // ─── Global Chat-List Realtime Subscription ──────────────────────────────
+  // Listens to ALL new messages (no chat_id filter) so chat list always reflects
+  // latest message regardless of which chat is currently open.
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const channel = supabase
+      .channel(`chat-list-updates-${currentUser.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+      }, (payload) => {
+        const newMsg = payload.new as any;
+        console.log('🔵 [Global] New message event received:', newMsg?.id, 'chat:', newMsg?.chat_id);
+        if (!newMsg?.chat_id) return;
+
+        setChats(prev => {
+          const idx = prev.findIndex((c: any) => c.id === newMsg.chat_id);
+          if (idx === -1) {
+            // Unknown chat — re-fetch full list to pick it up
+            fetchConversations();
+            return prev;
+          }
+          const updatedChat = {
+            ...prev[idx],
+            lastMessage: {
+              id: newMsg.id,
+              senderId: newMsg.sender_id,
+              content: newMsg.text,
+              text: newMsg.text,
+              type: newMsg.type || 'text',
+              timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              status: (newMsg.status || 'sent') as any,
+            },
+            lastMessageAt: newMsg.created_at,
+            // Increment unread if not the current user's own message
+            unreadCount: newMsg.sender_id !== currentUser.id
+              ? (prev[idx].unreadCount || 0) + 1
+              : prev[idx].unreadCount,
+            // Also append to messages array (for ChatPanel's initial messages)
+            messages: [
+              ...prev[idx].messages,
+              {
+                id: newMsg.id,
+                senderId: newMsg.sender_id,
+                receiverId: newMsg.receiver_id,
+                content: newMsg.text,
+                text: newMsg.text,
+                type: newMsg.type || 'text',
+                timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                createdAt: newMsg.created_at,
+                status: (newMsg.status || 'sent') as any,
+                replyTo: newMsg.reply_to,
+                replyToMessage: newMsg.reply_to_message,
+              }
+            ]
+          };
+          // Re-sort: newest chat to top
+          const next = [...prev];
+          next.splice(idx, 1);
+          next.unshift(updatedChat);
+          localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(next));
+          return next;
+        });
+      })
+      .subscribe((status) => {
+        console.log('[Global chat-list sub] status:', status);
+        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          // Retry after 3s
+          setTimeout(() => channel.subscribe(), 3000);
+        }
+      });
+
+    // Polling fallback every 8s in case realtime drops
+    const pollInterval = setInterval(() => {
+      fetchConversations();
+    }, 8000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+    };
+  }, [currentUser?.id, fetchConversations]);
 
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -275,8 +474,11 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             
             updatedChats.splice(chatIndex, 1);
             return [chat, ...updatedChats];
+          } else {
+            // New conversation created by another user! Automatically re-fetch conversation list
+            fetchConversations();
+            return prev;
           }
-          return prev;
         });
       })
       .on('postgres_changes', {
@@ -300,12 +502,29 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           return c;
         }));
       })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chats'
+      }, () => {
+        // If a new chat is created involving this user, refresh conversations list
+        fetchConversations();
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUser?.id, selectedChatId]); // Added selectedChatId to correctly gate unread increments
+  }, [currentUser?.id, selectedChatId, fetchConversations]); // Added selectedChatId to correctly gate unread increments
+
+  // Background sync for conversation list & latest messages
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const interval = setInterval(() => {
+      fetchConversations();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, fetchConversations]);
 
   // Reset unread count when opening a chat
   useEffect(() => {
@@ -318,12 +537,10 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
   // Sync online status
   useEffect(() => {
-    if (onlineUsers.length > 0) {
-      setChats((prev: any) => prev.map((c: any) => ({
-        ...c,
-        user: { ...c.user, isOnline: onlineUsers.includes(c.user.id) }
-      })));
-    }
+    setChats((prev: any) => prev.map((c: any) => ({
+      ...c,
+      user: { ...c.user, isOnline: onlineUsers.includes(c.user.id) }
+    })));
   }, [onlineUsers]);
 
   useEffect(() => {
@@ -361,13 +578,15 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       }
 
       // 2. Check database for existing chat between these two users
-      const { data: existingChat, error: fetchError } = await supabase
+      const { data: existingChats, error: fetchError } = await supabase
         .from('chats')
         .select('*')
         .or(`and(participant1_id.eq.${currentUser.id},participant2_id.eq.${user.id}),and(participant1_id.eq.${user.id},participant2_id.eq.${currentUser.id})`)
-        .maybeSingle();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (fetchError) throw fetchError;
+      const existingChat = existingChats && existingChats.length > 0 ? existingChats[0] : null;
 
       if (existingChat) {
         // Chat exists in DB but maybe not in local state yet
@@ -500,9 +719,19 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   currentTheme={currentTheme}
                   t={t}
                   onSendMessage={async (chatId, msg) => {
-                    setChats((prev: any) => prev.map((c: any) => 
-                      c.id === chatId ? { ...c, lastMessage: msg, lastMessageAt: new Date().toISOString() } : c
-                    ));
+                    setChats((prev: any) => prev.map((c: any) => {
+                      if (c.id === chatId) {
+                        const exists = c.messages.some((m: any) => m.id === msg.id);
+                        const updatedMessages = exists ? c.messages : [...c.messages, msg];
+                        return {
+                          ...c,
+                          messages: updatedMessages,
+                          lastMessage: msg,
+                          lastMessageAt: new Date().toISOString()
+                        };
+                      }
+                      return c;
+                    }));
                   }}
                   onOpenInfo={() => setShowContactInfo(true)}
                   showSearch={showChatSearch}
@@ -517,6 +746,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   onOpenWallpaper={() => setShowWallpaperPicker(true)}
                   onAddToGroup={() => {}}
                   onReact={handleReact}
+                  onlineUsers={onlineUsers}
                 />
               ) : (
                 <>
@@ -536,6 +766,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                         t={t}
                         currentUser={currentUser}
                         globalSearch={globalSearch}
+                        onRefresh={fetchConversations}
                       />
                     )}
                     {mobileTab === 'calls' && (
@@ -606,6 +837,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   currentUser={currentUser}
                   activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
                   globalSearch={globalSearch}
+                  onRefresh={fetchConversations}
                 />
               </div>
 
@@ -620,9 +852,19 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     currentTheme={currentTheme}
                     t={t}
                     onSendMessage={async (chatId, msg) => {
-                      setChats((prev: any) => prev.map((c: any) => 
-                        c.id === chatId ? { ...c, lastMessage: msg, lastMessageAt: new Date().toISOString() } : c
-                      ));
+                      setChats((prev: any) => prev.map((c: any) => {
+                        if (c.id === chatId) {
+                          const exists = c.messages.some((m: any) => m.id === msg.id);
+                          const updatedMessages = exists ? c.messages : [...c.messages, msg];
+                          return {
+                            ...c,
+                            messages: updatedMessages,
+                            lastMessage: msg,
+                            lastMessageAt: new Date().toISOString()
+                          };
+                        }
+                        return c;
+                      }));
                     }}
                     onOpenInfo={() => setShowContactInfo(true)}
                     showSearch={showChatSearch}
@@ -638,6 +880,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     onAddToGroup={() => {}}
                     onReact={handleReact}
                     allChats={chats}
+                    onlineUsers={onlineUsers}
                   />
                 ) : (
                   <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-transparent">

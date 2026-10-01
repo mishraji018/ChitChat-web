@@ -22,7 +22,7 @@ const UserAvatar = ({ name, color, size = 'md', isOnline, image, className }: Av
         </div>
       )}
       {isOnline !== undefined && (
-        <span className={`absolute bottom-0 right-0 ${dotSizes[size]} rounded-full border-2 border-white ${isOnline ? 'bg-online' : 'bg-muted-foreground/30'}`} />
+        <span className={`absolute bottom-0 right-0 ${dotSizes[size]} rounded-full border-2 border-[var(--chat-list-bg,#ffffff)] ${isOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' : 'bg-zinc-400/40'}`} />
       )}
     </div>
   );

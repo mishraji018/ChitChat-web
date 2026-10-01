@@ -22,6 +22,7 @@ interface ChatListSidebarProps {
   globalSearch?: string;
   activeFilter?: string;
   onStartChat?: (user: UserType) => void;
+  onRefresh?: () => Promise<void>;
 }
 
 type Filter = 'all' | 'unread' | 'favourites' | 'groups';
@@ -40,7 +41,8 @@ const ChatListSidebar = ({
   t, 
   currentUser,
   globalSearch = '',
-  onStartChat
+  onStartChat,
+  onRefresh,
 }: ChatListSidebarProps) => {
   const safeT = t || translations['English'];
   const [localSearch, setLocalSearch] = useState('');
@@ -54,6 +56,43 @@ const ChatListSidebar = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // ─── Pull-to-Refresh state ────────────────────────────────────
+  const [pullY, setPullY] = useState(0);          // how far user has pulled (px)
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const listRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 70; // px needed to trigger refresh
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Only start pull tracking if list is scrolled to top
+    if (listRef.current && listRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+    } else {
+      touchStartY.current = 0;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartY.current || isRefreshing) return;
+    const delta = e.touches[0].clientY - touchStartY.current;
+    if (delta > 0 && listRef.current?.scrollTop === 0) {
+      // Dampen the pull so it feels elastic
+      setPullY(Math.min(delta * 0.45, PULL_THRESHOLD + 20));
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (pullY >= PULL_THRESHOLD && onRefresh && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullY(0);
+      try { await onRefresh(); } finally { setIsRefreshing(false); }
+    } else {
+      setPullY(0);
+    }
+    touchStartY.current = 0;
+  };
+  // ──────────────────────────────────────────────────────────────
 
   // Task 3: State variable to track archived chats for immediate UI updates
   const [archivedIds, setArchivedIds] = useState<string[]>(() => 
@@ -304,8 +343,46 @@ const ChatListSidebar = ({
         </div>
       )}
 
-      {/* Chat List */}
-      <div className="flex-1 overflow-y-auto mt-2 scrollbar-thin relative pb-24">
+      {/* Chat List with Pull-to-Refresh */}
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto mt-2 scrollbar-thin relative pb-24"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Pull indicator */}
+        {(pullY > 0 || isRefreshing) && (
+          <div
+            className="flex items-center justify-center transition-all"
+            style={{ height: isRefreshing ? 48 : pullY, overflow: 'hidden' }}
+          >
+            <div className={`flex flex-col items-center gap-1 ${
+              pullY >= PULL_THRESHOLD || isRefreshing ? 'text-[var(--bg-primary)]' : 'text-[var(--text-secondary)]'
+            }`}>
+              <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center ${
+                isRefreshing
+                  ? 'border-[var(--bg-primary)] border-t-transparent animate-spin'
+                  : pullY >= PULL_THRESHOLD
+                    ? 'border-[var(--bg-primary)] bg-[var(--bg-primary)]/10'
+                    : 'border-current'
+              }`}>
+                {!isRefreshing && (
+                  <svg
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.5"
+                    style={{ transform: `rotate(${Math.min(pullY / PULL_THRESHOLD, 1) * 180}deg)`, transition: 'transform 0.1s' }}
+                  >
+                    <path d="M12 5v14M5 12l7 7 7-7" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-[10px] font-semibold">
+                {isRefreshing ? 'Refreshing...' : pullY >= PULL_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}
+              </span>
+            </div>
+          </div>
+        )}
         {filtered.length > 0 ? (
           filtered.map((chat) => (
             <ChatListItem
