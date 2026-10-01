@@ -226,7 +226,7 @@ const InputBar = ({
                   type="button"
                   onClick={onSendMsg}
                   disabled={disabled}
-                  className="ml-1 p-2.5 rounded-full bg-white text-[var(--bg-primary)] shadow-md hover:scale-105 active:scale-95 transition-all"
+                  className="ml-1 p-2.5 rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] shadow-md hover:scale-105 active:scale-95 transition-all"
                   title="Send message"
                 >
                   <Send size={18} className="ml-0.5" />
@@ -236,7 +236,7 @@ const InputBar = ({
                   type="button"
                   onMouseDown={startRec}
                   disabled={disabled}
-                  className="p-2 rounded-xl transition-all hover:bg-white/10 opacity-80 hover:opacity-100"
+                  className="p-2 rounded-xl transition-all hover:bg-black/5 dark:hover:bg-white/10 opacity-80 hover:opacity-100"
                   title="Voice note"
                 >
                   <Mic size={20} />

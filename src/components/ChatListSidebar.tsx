@@ -179,7 +179,6 @@ const ChatListSidebar = ({
 
   return (
     <div className="w-full h-full flex flex-col bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] relative overflow-hidden">
-      <div className="teal-chat-list-inner flex flex-col h-full w-full">
       {/* New Redesigned Header */}
       <div className="px-6 pt-6 pb-2">
         <div className="flex items-center justify-between mb-4">
@@ -207,7 +206,7 @@ const ChatListSidebar = ({
             <div className="relative" ref={notificationsRef}>
               <button 
                 onClick={() => setShowNotifications(!showNotifications)}
-                className={`p-2 rounded-full transition-all ${showNotifications ? 'text-[var(--text-primary)] bg-white/5' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5'}`}
+                className={`p-2 rounded-full transition-all ${showNotifications ? 'text-[var(--chat-list-text,#111111)] bg-black/10 dark:bg-white/10' : 'text-[var(--chat-list-subtext,#666666)] hover:text-[var(--chat-list-text,#111111)] hover:bg-black/5 dark:hover:bg-white/10'}`}
                 title="Notifications"
               >
                 <Bell size={20} />
@@ -218,14 +217,14 @@ const ChatListSidebar = ({
                     initial={{ opacity: 0, scale: 0.95, y: -10 }} 
                     animate={{ opacity: 1, scale: 1, y: 0 }} 
                     exit={{ opacity: 0, scale: 0.95, y: -10 }} 
-                    className="absolute right-0 mt-2 w-72 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-2xl z-50 py-4 px-4 overflow-hidden"
+                    className="absolute right-0 mt-2 w-72 bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl z-50 py-4 px-4 overflow-hidden"
                   >
-                    <h3 className="text-sm font-bold text-[var(--text-primary)] mb-4 px-2">Notifications</h3>
+                    <h3 className="text-sm font-bold text-[var(--chat-list-text,#111111)] mb-4 px-2">Notifications</h3>
                     <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 text-[var(--text-secondary)]">
+                      <div className="w-12 h-12 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-3 text-[var(--chat-list-subtext,#666666)]">
                         <Bell size={24} />
                       </div>
-                      <p className="text-xs text-[var(--text-secondary)]">No notifications yet</p>
+                      <p className="text-xs text-[var(--chat-list-subtext,#666666)]">No notifications yet</p>
                     </div>
                   </motion.div>
                 )}
@@ -234,26 +233,26 @@ const ChatListSidebar = ({
 
             <button 
               onClick={onOpenSettings}
-              className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded-full transition-all"
+              className="p-2 text-[var(--chat-list-subtext,#666666)] hover:text-[var(--chat-list-text,#111111)] hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-all"
               title="Settings"
             >
               <Settings size={20} />
             </button>
             <div className="relative" ref={menuRef}>
-              <button onClick={() => setShowMenu(!showMenu)} className="p-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 rounded-full">
+              <button onClick={() => setShowMenu(!showMenu)} className="p-2 text-[var(--chat-list-subtext,#666666)] hover:text-[var(--chat-list-text,#111111)] hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-all">
                 <MoreVertical size={20} />
               </button>
               <AnimatePresence>
                 {showMenu && (
-                  <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }} className="absolute right-0 mt-2 w-56 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-2xl z-50 py-2 overflow-hidden">
+                  <motion.div initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }} className="absolute right-0 mt-2 w-56 bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl z-50 py-2 overflow-hidden">
                     {[
                       { icon: <User size={18} />, label: 'Profile', action: onOpenProfile },
                       { icon: <Users size={18} />, label: 'New Group', action: onOpenNewGroup },
                       { icon: <Archive size={18} />, label: 'Archived Chats', action: () => { setShowArchived(true); setShowMenu(false); } },
                       { isSeparator: true },
-                      { icon: <LogOut size={18} />, label: 'Logout', action: onLogout, className: 'text-red-400' },
-                    ].map((item, idx) => (item as any).isSeparator ? <div key={idx} className="h-px border-b border-[var(--border-color)] my-1" /> : (
-                      <button key={idx} onClick={() => { (item as any).action(); setShowMenu(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors ${(item as any).className || 'text-[var(--text-primary)]'}`}>
+                      { icon: <LogOut size={18} />, label: 'Logout', action: onLogout, className: 'text-red-500' },
+                    ].map((item, idx) => (item as any).isSeparator ? <div key={idx} className="h-px border-b border-black/10 dark:border-white/10 my-1" /> : (
+                      <button key={idx} onClick={() => { (item as any).action(); setShowMenu(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${(item as any).className || 'text-[var(--chat-list-text,#111111)]'}`}>
                         {(item as any).icon}
                         <span>{(item as any).label}</span>
                       </button>
@@ -369,17 +368,17 @@ const ChatListSidebar = ({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-0 z-[60] bg-[var(--bg-primary)] flex flex-col h-full"
+            className="absolute inset-0 z-[60] bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] flex flex-col h-full"
           >
             {/* Header */}
-            <div className="px-6 py-4 border-b border-[var(--border-color)] flex items-center gap-4">
+            <div className="px-6 py-4 border-b border-black/10 dark:border-white/10 flex items-center gap-4">
               <button 
                 onClick={() => setShowNewChatUI(false)}
-                className="p-2 -ml-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-full hover:bg-white/5 transition-colors"
+                className="p-2 -ml-2 text-[var(--chat-list-subtext,#666666)] hover:text-[var(--chat-list-text,#111111)] rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
               >
                 <ArrowLeft size={20} />
               </button>
-              <h2 className="font-bold text-lg text-[var(--text-primary)] flex-1">
+              <h2 className="font-bold text-lg text-[var(--chat-list-text,#111111)] flex-1">
                 New Chat
               </h2>
             </div>
@@ -387,12 +386,12 @@ const ChatListSidebar = ({
             {/* Search Bar */}
             <div className="px-6 py-4">
               <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] group-focus-within:text-purple-500 transition-colors" size={18} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--chat-list-subtext,#666666)] group-focus-within:text-purple-500 transition-colors" size={18} />
                 <input
                   autoFocus
                   type="text"
                   placeholder="Search users on Blink"
-                  className="w-full bg-[var(--bg-secondary)] border border-transparent focus:border-purple-500/30 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none transition-all placeholder:text-[var(--text-secondary)] text-[var(--text-primary)]"
+                  className="w-full bg-black/5 dark:bg-white/10 border border-transparent focus:border-purple-500/30 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none transition-all placeholder:text-[var(--chat-list-subtext,#666666)] text-[var(--chat-list-text,#111111)]"
                   value={userSearchQuery}
                   onChange={(e) => setUserSearchQuery(e.target.value)}
                 />
@@ -417,16 +416,16 @@ const ChatListSidebar = ({
                         onStartChat?.(user);
                         setShowNewChatUI(false);
                       }}
-                      className="flex items-center gap-3 p-3 hover:bg-white/5 rounded-2xl cursor-pointer transition-all group"
+                      className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-2xl cursor-pointer transition-all group"
                     >
-                      <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-400 font-bold text-lg border border-purple-500/10">
+                      <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold text-lg border border-purple-500/10">
                         {user.displayName[0]}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm text-[var(--text-primary)] truncate">{user.displayName}</p>
-                        <p className="text-xs text-[var(--text-secondary)] truncate">@{user.username}</p>
+                        <p className="font-bold text-sm text-[var(--chat-list-text,#111111)] truncate">{user.displayName}</p>
+                        <p className="text-xs text-[var(--chat-list-subtext,#666666)] truncate">@{user.username}</p>
                       </div>
-                      <button className="px-4 py-1.5 bg-purple-600/10 text-purple-400 text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                      <button className="px-4 py-1.5 bg-purple-600/10 text-purple-500 text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-all">
                         Message
                       </button>
                     </motion.div>
@@ -434,11 +433,11 @@ const ChatListSidebar = ({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-                  <div className="w-16 h-16 rounded-full bg-[var(--bg-secondary)] flex items-center justify-center mb-4 text-[var(--text-secondary)]">
+                  <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-4 text-[var(--chat-list-subtext,#666666)]">
                     <Search size={32} />
                   </div>
-                  <p className="font-bold text-[var(--text-primary)]">No users found</p>
-                  <p className="text-xs text-[var(--text-secondary)] mt-1">Try searching for someone else</p>
+                  <p className="font-bold text-[var(--chat-list-text,#111111)]">No users found</p>
+                  <p className="text-xs text-[var(--chat-list-subtext,#666666)] mt-1">Try searching for someone else</p>
                 </div>
               )}
             </div>
@@ -449,7 +448,6 @@ const ChatListSidebar = ({
           </motion.div>
         )}
       </AnimatePresence>
-      </div>
     </div>
   );
 };

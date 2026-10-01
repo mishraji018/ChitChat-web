@@ -460,7 +460,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex flex-col h-screen w-screen overflow-hidden bg-background font-display"
+      className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)] font-display"
     >
       <div className="flex flex-1 overflow-hidden">
         {!isMobile && (
@@ -625,8 +625,8 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   />
                 ) : (
                   <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-transparent">
-                    <div className="w-24 h-24 rounded-[32px] bg-white/10 flex items-center justify-center mb-6 border border-white/20 shadow-lg">
-                      <MessageSquare size={48} className="text-white/80" />
+                    <div className="w-24 h-24 rounded-[32px] bg-black/5 dark:bg-white/10 flex items-center justify-center mb-6 border border-black/10 dark:border-white/20 shadow-md">
+                      <MessageSquare size={48} className="text-[var(--text-primary)] opacity-70" />
                     </div>
                     <h1 className="text-3xl font-extrabold text-[var(--text-primary)] mb-3 tracking-tight">Select a conversation</h1>
                     <p className="max-w-md text-[var(--text-secondary)] text-sm leading-relaxed">
