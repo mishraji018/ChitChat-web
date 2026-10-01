@@ -190,23 +190,25 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
       setReplyMessage(null);
       const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia, undefined, isAI, currentReply);
       await updateStreak();
-      if (onSendMessage && data) onSendMessage(chat.id, { 
-        id: data.id, 
-        senderId: currentUser.id, 
-        receiverId: chat.user.id, 
-        type, 
-        content, 
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
-        createdAt: data.created_at, 
-        status: 'sent',
-        is_ai: isAI,
-        replyTo: currentReply?.id,
-        replyToMessage: currentReply || undefined
-      } as Message);
+      if (onSendMessage) {
+        onSendMessage(chat.id, { 
+          id: data?.id || uuidv4(), 
+          senderId: currentUser.id, 
+          receiverId: chat.user.id, 
+          type, 
+          content, 
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+          createdAt: data?.created_at || new Date().toISOString(), 
+          status: 'sent',
+          is_ai: isAI,
+          replyTo: currentReply?.id,
+          replyToMessage: currentReply || undefined
+        } as Message);
+      }
       return data;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Send failed:', err);
-      if (!isAI) toast.error('Failed to send message');
+      if (!isAI) toast.error(err?.message || 'Failed to send message');
     }
   };
 

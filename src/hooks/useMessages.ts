@@ -177,9 +177,34 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     replyTo?: { id: string; senderName?: string; text: string } | null
   ) => {
     if (type === 'text' && (!text || !text.trim())) return;
+    const clientGeneratedId = mId || crypto.randomUUID();
+    const nowIso = new Date().toISOString();
 
-    const payload: any = {
-      id: mId,
+    // 1. Optimistic message for instant UI render
+    const optimisticMsg: Message = {
+      id: clientGeneratedId,
+      senderId: sId,
+      receiverId: '',
+      content: text.trim(),
+      type: type as any,
+      mediaData: mData,
+      status: 'sending' as MessageStatus,
+      createdAt: nowIso,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      is_ai: isAI,
+      replyTo: replyTo?.id,
+      replyToMessage: replyTo || undefined
+    };
+
+    setMessages(prev => {
+      const exists = prev.some(m => m.id === clientGeneratedId);
+      const next = exists ? prev : [...prev, optimisticMsg];
+      localStorage.setItem(`messages_${cId}`, JSON.stringify(next));
+      return next;
+    });
+
+    const fullPayload: any = {
+      id: clientGeneratedId,
       chat_id: cId,
       sender_id: sId,
       text: text.trim(),
@@ -190,15 +215,59 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
       is_ai: isAI,
       reply_to: replyTo?.id || null,
       reply_to_message: replyTo || null,
-      created_at: new Date().toISOString()
+      created_at: nowIso
     };
 
     try {
-      const { data, error } = await supabase.from('messages').insert(payload).select().single();
-      if (error) throw error;
-      return data;
+      // First try full payload
+      let result = await supabase.from('messages').insert(fullPayload).select().single();
+
+      // If failed due to extra column (reply_to or reply_to_message not in DB), fallback to base schema
+      if (result.error) {
+        console.warn('[useMessages] Full insert error, trying standard payload:', result.error.message);
+        const basePayload: any = {
+          id: clientGeneratedId,
+          chat_id: cId,
+          sender_id: sId,
+          text: text.trim(),
+          type,
+          media_data: mData,
+          status: 'sent',
+          seen: false,
+          is_ai: isAI,
+          created_at: nowIso
+        };
+        result = await supabase.from('messages').insert(basePayload).select().single();
+      }
+
+      // If still error, try minimal schema (id, chat_id, sender_id, text, created_at, seen)
+      if (result.error) {
+        console.warn('[useMessages] Base insert error, trying minimal payload:', result.error.message);
+        const minimalPayload: any = {
+          id: clientGeneratedId,
+          chat_id: cId,
+          sender_id: sId,
+          text: text.trim(),
+          seen: false,
+          created_at: nowIso
+        };
+        result = await supabase.from('messages').insert(minimalPayload).select().single();
+      }
+
+      if (result.error) throw result.error;
+
+      // Update optimistic message status to 'sent'
+      setMessages(prev => {
+        const next = prev.map(m => m.id === clientGeneratedId ? { ...m, status: 'sent' as MessageStatus } : m);
+        localStorage.setItem(`messages_${cId}`, JSON.stringify(next));
+        return next;
+      });
+
+      return result.data;
     } catch (err) {
       console.error('[useMessages] Send error:', err);
+      // Mark optimistic message as failed
+      setMessages(prev => prev.map(m => m.id === clientGeneratedId ? { ...m, status: 'error' as MessageStatus } : m));
       throw err;
     }
   };
