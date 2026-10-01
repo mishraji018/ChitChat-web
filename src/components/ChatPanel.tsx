@@ -442,29 +442,46 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                   }
                 }
 
-                return messages.map((m, i) => (
-                  <MessageBubble 
-                    key={m.id} 
-                    message={m} 
-                    isSent={m.senderId === currentUser.id} 
-                    t={t} 
-                    currentUser={currentUser} 
-                    searchQuery={searchQuery} 
-                    isHighlighted={searchResults[currentMatch] === i} 
-                    onReact={(emoji) => {
-                      addReaction(m.id, emoji, currentUser.id);
-                      if (onReact) onReact(chat.id, m.id, emoji);
-                    }} 
-                    onReply={(targetMsg) => {
-                      setReplyMessage({
-                        id: targetMsg.id,
-                        senderName: targetMsg.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
-                        text: targetMsg.content || targetMsg.text || 'Attachment'
-                      });
-                    }}
-                    isLatestSentMessage={i === lastSentIndex}
-                  />
-                ));
+                return messages.map((m, i) => {
+                  // Resolve replyToMessage if missing on recipient device but replyTo ID exists
+                  let resolvedReply = m.replyToMessage;
+                  if (!resolvedReply && m.replyTo) {
+                    const parent = messages.find(p => p.id === m.replyTo);
+                    if (parent) {
+                      resolvedReply = {
+                        id: parent.id,
+                        senderName: parent.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
+                        text: parent.content || parent.text || 'Message'
+                      };
+                    }
+                  }
+
+                  const enrichedMsg = resolvedReply ? { ...m, replyToMessage: resolvedReply } : m;
+
+                  return (
+                    <MessageBubble 
+                      key={m.id} 
+                      message={enrichedMsg} 
+                      isSent={m.senderId === currentUser.id} 
+                      t={t} 
+                      currentUser={currentUser} 
+                      searchQuery={searchQuery} 
+                      isHighlighted={searchResults[currentMatch] === i} 
+                      onReact={(emoji) => {
+                        addReaction(m.id, emoji, currentUser.id);
+                        if (onReact) onReact(chat.id, m.id, emoji);
+                      }} 
+                      onReply={(targetMsg) => {
+                        setReplyMessage({
+                          id: targetMsg.id,
+                          senderName: targetMsg.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
+                          text: targetMsg.content || targetMsg.text || 'Attachment'
+                        });
+                      }} 
+                      isLatestSentMessage={i === lastSentIndex}
+                    />
+                  );
+                });
               })()
             )}
             {isRecTyping && <TypingIndicator />}<div ref={messagesEndRef} /><div ref={bottomRef} />

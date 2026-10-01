@@ -106,9 +106,15 @@ const MessageBubble = ({
       default: return (
         <div>
           {message.replyToMessage && (
-            <div className={`mb-2 p-2 rounded-xl text-xs border-l-4 ${isSent ? 'bg-black/15 border-white/80 text-white' : 'bg-black/5 dark:bg-white/10 border-primary text-[var(--text-primary)]'}`}>
-              <p className="font-bold opacity-80">{message.replyToMessage.senderName || 'Replied'}</p>
-              <p className="truncate opacity-90">{message.replyToMessage.text}</p>
+            <div className={`mb-2 p-2.5 rounded-xl text-xs border-l-4 transition-all ${
+              isSent 
+                ? 'bg-black/20 border-white/90 text-white' 
+                : 'bg-black/10 dark:bg-white/10 border-emerald-500 text-[var(--bubble-received-text)] shadow-sm'
+            }`}>
+              <p className={`font-bold ${isSent ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {message.replyToMessage.senderName || 'Replied'}
+              </p>
+              <p className="truncate opacity-90 mt-0.5">{message.replyToMessage.text}</p>
             </div>
           )}
           <p className={`${isEmoji ? 'text-5xl py-2' : 'text-sm'} leading-relaxed break-words whitespace-pre-wrap`}>

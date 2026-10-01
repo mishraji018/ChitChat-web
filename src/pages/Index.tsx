@@ -258,7 +258,9 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               uploadStatus: newMessage.upload_status || 'done',
               timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               createdAt: newMessage.created_at,
-              status: (newMessage.status || (newMessage.seen ? 'seen' : 'sent')) as MessageStatus
+              status: (newMessage.status || (newMessage.seen ? 'seen' : 'sent')) as MessageStatus,
+              replyTo: newMessage.reply_to,
+              replyToMessage: newMessage.reply_to_message
             };
 
             if (!chat.messages.some((m: any) => m.id === mappedMsg.id)) {
