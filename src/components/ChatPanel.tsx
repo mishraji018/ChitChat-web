@@ -104,7 +104,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const topObserverRef = useRef<HTMLDivElement>(null);
 
   // ─── [46-75] Hooks ────────────────────────
-  const { messages, sendMessage, markAsRead, markAsDelivered, loading: mLoading, setMessages } = useMessages(chat?.id || null, chat?.messages || []);
+  const { messages, sendMessage, markAsRead, markAsDelivered, addReaction, loading: mLoading, setMessages } = useMessages(chat?.id || null, chat?.messages || []);
   const { onlineUsers } = usePresence(currentUser.id);
   const { isTyping: isRecTyping, handleTyping } = useTyping(chat?.id || null, currentUser.id);
   const { streak, updateStreak, justBroken } = useStreak(currentUser.id, chat?.user.id || '');
@@ -225,20 +225,37 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
     }
     try {
       const result = await uploadFile(f, chat.id, currentUser.id);
-      await supabase.from('messages').insert({
+      const isVoice = f.name.startsWith('voice_') || f.type.startsWith('audio/');
+      const messageType = isVoice ? 'audio' : result.type;
+
+      const { data: insertedMsg, error: insertErr } = await supabase.from('messages').insert({
         chat_id: chat.id,
         sender_id: currentUser.id,
-        text: result.name,
-        type: result.type,
+        text: isVoice ? '🎤 Voice note' : result.name,
+        type: messageType,
         media_url: result.url,
-        media_type: result.type,
+        media_type: messageType,
         media_name: result.name,
         media_size: result.size,
         upload_status: 'done',
         status: 'sent',
         seen: false,
         created_at: new Date().toISOString()
-      });
+      }).select().single();
+
+      if (!insertErr && insertedMsg && onSendMessage) {
+        onSendMessage(chat.id, {
+          id: insertedMsg.id,
+          senderId: currentUser.id,
+          receiverId: chat.user.id,
+          type: messageType,
+          content: insertedMsg.text,
+          mediaUrl: result.url,
+          mediaName: result.name,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          status: 'sent'
+        } as Message);
+      }
     } catch (e) { console.error('Upload error:', e); }
   };
 
@@ -415,7 +432,10 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                     currentUser={currentUser} 
                     searchQuery={searchQuery} 
                     isHighlighted={searchResults[currentMatch] === i} 
-                    onReact={(e) => onReact?.(chat.id, m.id, e)} 
+                    onReact={(emoji) => {
+                      addReaction(m.id, emoji, currentUser.id);
+                      if (onReact) onReact(chat.id, m.id, emoji);
+                    }} 
                     onReply={(targetMsg) => {
                       setReplyMessage({
                         id: targetMsg.id,

@@ -101,8 +101,52 @@ const InputBar = ({
   };
 
   const getFStat = (s: number) => s < 1024 * 1024 ? { t: 'Small', c: 'text-green-400' } : s < 10 * 1024 * 1024 ? { t: 'Med', c: 'text-yellow-400' } : { t: 'Large', c: 'text-orange-400' };
-  const startRec = () => { setIsRec(true); setRecT(0); tRef.current = setInterval(() => setRecT(t => t + 1), 1000); };
-  const stopRec = (s: boolean) => { setIsRec(false); clearInterval(tRef.current); if (s) onSend('🎤 Voice note'); setRecT(0); };
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const startRec = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(track => track.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (audioBlob.size > 0 && onSendFile) {
+          const audioFile = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
+          onSendFile(audioFile);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRec(true);
+      setRecT(0);
+      tRef.current = setInterval(() => setRecT(t => t + 1), 1000);
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+      toast.error('Microphone permission required for voice notes');
+    }
+  };
+
+  const stopRec = (save: boolean) => {
+    setIsRec(false);
+    clearInterval(tRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      if (!save) {
+        audioChunksRef.current = [];
+      }
+      mediaRecorderRef.current.stop();
+    }
+    setRecT(0);
+  };
 
   // ─── [111-321] Render ─────────────────────
   return (

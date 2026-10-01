@@ -32,6 +32,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus,
     replyTo: m.reply_to,
     replyToMessage: m.reply_to_message,
+    reactions: m.reactions || [],
     is_ai: m.is_ai
   }), []);
 
@@ -232,5 +233,41 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     }
   };
 
-  return { messages, sendMessage, markAsRead, markAsDelivered, loading, setMessages };
+  const addReaction = async (mId: string, emoji: string, uId: string) => {
+    setMessages(prev => {
+      const next = prev.map(m => {
+        if (m.id === mId) {
+          const currentReactions = m.reactions || [];
+          const existing = currentReactions.find(r => r.userId === uId);
+          let updated;
+          if (existing) {
+            updated = currentReactions.map(r => r.userId === uId ? { ...r, emoji } : r);
+          } else {
+            updated = [...currentReactions, { emoji, userId: uId }];
+          }
+          return { ...m, reactions: updated };
+        }
+        return m;
+      });
+      if (chatId) localStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
+      return next;
+    });
+
+    try {
+      const target = messages.find(m => m.id === mId);
+      const current = target?.reactions || [];
+      const updated = current.some(r => r.userId === uId)
+        ? current.map(r => r.userId === uId ? { ...r, emoji } : r)
+        : [...current, { emoji, userId: uId }];
+
+      await supabase
+        .from('messages')
+        .update({ reactions: updated })
+        .eq('id', mId);
+    } catch (err) {
+      console.error('[useMessages] Reaction error:', err);
+    }
+  };
+
+  return { messages, sendMessage, markAsRead, markAsDelivered, addReaction, loading, setMessages };
 };

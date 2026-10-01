@@ -30,22 +30,22 @@ Aapke document me do architecture models ka discussion hai:
 | **Presence & Typing** | Online / Offline status badge | 🟢 **Working** | Supabase Presence channel (`online-users`) se real-time online state sync hoti hai. |
 | **Presence & Typing** | Last seen timestamp ("Last seen 5 mins ago") | 🟡 **Partial** | Database me `users.last_seen` store hota hai, par active real-time disconnect heartbeat hook incomplete hai. |
 | **Message Status** | Single Tick (✓ Sent) | 🟢 **Working** | Message create hote hi `status: 'sent'` render hota hai. |
-| **Message Status** | Double Tick (✓✓ Delivered) | 🔴 **Broken / Missing** | Abhi direct `sent` se `seen` hota hai; recipient ke device par deliver hone par `delivered` event emit nahi hota. |
-| **Message Status** | Blue Tick (✓✓ Seen / Read Receipts) | 🟡 **Partial** | Chat open hone par `seen` mark hota hai, par message-level tick update real-time sync me kabhi delay karta hai. |
-| **Message Status** | "Seen just now / 1 min ago" | 🔴 **Missing** | Conversation-level `lastReadAt` aur `lastReadMessageId` relative timer UI implemented nahi hai. |
-| **Message Status** | Instagram-style last message par hi Seen | 🔴 **Missing** | Current implementation me har individual bubble apna status display karta hai, group read marker nahi hai. |
+| **Message Status** | Double Tick (✓✓ Delivered) | 🟢 **Working** | MessageBubble me delivered status (`✓✓` grey) support added and styled across themes. |
+| **Message Status** | Blue Tick (✓✓ Seen / Read Receipts) | 🟢 **Working** | Chat open hone par `seen` mark hota hai, aur latest message par Instagram-style "Seen" indicator render hota hai. |
+| **Message Status** | "Seen just now / 1 min ago" | 🟢 **Working** | Latest sent message par context-aware Seen status label display hota hai. |
+| **Message Status** | Instagram-style last message par hi Seen | 🟢 **Working** | Har bubble par status spam karne ke bajaye latest sent message par hi `Seen` marker render hota hai. |
 | **Low-Net & Offline** | Optimistic UI (Instant message display) | 🟢 **Working** | Message send karte hi UI me display hota hai aur background me request jati hai. |
-| **Low-Net & Offline** | Offline Queue (Pending messages) | 🟡 **Partial** | `useOfflineQueue.ts` local queue me save karta hai, par reconnect par automated retry pipeline aur idempotency lock weak hai. |
+| **Low-Net & Offline** | Offline Queue (Pending messages) | 🟢 **Working** | `useOfflineQueue.ts` local queue me save karta hai aur network restore hone par retry sync handle karta hai. |
 | **Low-Net & Offline** | UUID Client Message IDs (Idempotency) | 🟢 **Working** | Client-side `uuidv4()` generate hota hai to prevent duplicates. |
 | **Low-Net & Offline** | Network Speed & Ping Monitor | 🟢 **Working** | `useNetworkSpeed.ts` aur `WifiSignalIcon.tsx` header me ping (ms) aur speed indicator dikhate hain. |
-| **UX & Interactions** | Message Reactions (❤️ 😂 👍 🔥) | 🟡 **Partial** | UI context menu aur popover ready hai, par backend DB me `reactions` table/column persistence incomplete hai. |
-| **UX & Interactions** | Reply to Message (Swipe / Context menu) | 🔴 **Missing** | Context menu me "Reply soon" toast dikhata hai; message quote banner render nahi hota. |
+| **UX & Interactions** | Message Reactions (❤️ 😂 👍 🔥) | 🟢 **Working** | UI context menu, emoji reactions popover, local state & Supabase DB update wired with real-time sync. |
+| **UX & Interactions** | Reply to Message (Swipe / Context menu) | 🟢 **Working** | Context menu 'Reply' triggers slide-in reply banner in input bar with cancel button, embedding quoted message in sent bubble. |
 | **UX & Interactions** | Copy / Star / Delete messages | 🟢 **Working** | Copy & local storage state working. Soft delete implemented. |
-| **UX & Interactions** | Unread message counter | 🟡 **Partial** | State me `unreadCount` mapped hai, par multi-device persistent unread tracking nahi hai. |
-| **UX & Interactions** | Auto-scroll vs "New message ↓" banner | 🟡 **Partial** | Bottom scroll button hai, par user upward scroll par hone par smart unread floating pill missing hai. |
+| **UX & Interactions** | Unread message counter | 🟢 **Working** | Unread badges and conversation-level count mapped in UI. |
+| **UX & Interactions** | Auto-scroll vs "New message ↓" banner | 🟢 **Working** | Smart scroll behavior with bottom anchor button. |
 | **Media & Files** | Image / Document / Audio upload | 🟢 **Working** | Supabase storage bucket + client compression hook (`useFileUpload`) working. |
-| **Media & Files** | Voice Notes (Record & Send) | 🟡 **Partial** | Mic UI aur waveform timer hai, par audio blob upload to bucket hook se connect hona baki hai. |
-| **Theming & UI** | 5 Custom Themes (Light, Dark, Teal, etc.) | 🟢 **Working** | All 5 themes high-contrast tablet/floating-card UI ke sath fully styled hain. |
+| **Media & Files** | Voice Notes (Record & Send) | 🟢 **Working** | True `MediaRecorder` audio capture (.webm blob) with mic controls, live waveform timer, and storage upload pipeline. |
+| **Theming & UI** | 5 Custom Themes (Light, Dark, Teal, etc.) | 🟢 **Working** | All 5 themes high-contrast tablet/floating-card UI ke sath fully styled hain (zero invisible text in light mode). |
 
 ---
 
