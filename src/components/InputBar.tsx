@@ -27,12 +27,14 @@ interface Props {
   onOpenAI?: () => void;
   value?: string;
   onChange?: (val: string) => void;
+  replyToMessage?: { id: string; senderName?: string; text: string } | null;
+  onCancelReply?: () => void;
 }
 
 const InputBar = ({ 
   onSend, t, currentUser, disabled, onTyping, isRecipientOnline = true, 
   messages = [], currentUserId, onSendFile, onOpenAI,
-  value, onChange
+  value, onChange, replyToMessage, onCancelReply
 }: Props) => {
   // ─── [1-40] State & Refs ──────────────────
   const [sFile, setSFile] = useState<File | null>(null);
@@ -161,6 +163,21 @@ const InputBar = ({
         </motion.div>
       ) : (
         <div className={`p-3 md:p-4 rounded-[2rem] border border-[var(--border-color)] bg-[var(--input-bg,#ffffff)]/10 backdrop-blur-md shadow-lg transition-all focus-within:ring-2 focus-within:ring-white/20 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          {replyToMessage && (
+            <div className="mb-2 px-3 py-2 bg-black/5 dark:bg-white/10 border-l-4 border-primary rounded-xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-bottom-2">
+              <div className="min-w-0 flex-1">
+                <span className="font-bold text-primary block truncate">Replying to {replyToMessage.senderName || 'User'}</span>
+                <span className="text-[var(--text-secondary)] truncate block">{replyToMessage.text}</span>
+              </div>
+              <button 
+                onClick={onCancelReply} 
+                className="p-1 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-black/5 dark:hover:bg-white/10 ml-2"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
+
           <div className="relative">
             <textarea
               ref={inRef as any}

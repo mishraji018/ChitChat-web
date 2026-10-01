@@ -27,6 +27,11 @@ export interface Message {
   status: MessageStatus;
   isQueued?: boolean;
   replyTo?: string;
+  replyToMessage?: {
+    id: string;
+    senderName?: string;
+    text: string;
+  };
   reactions?: { emoji: string; userId: string }[];
   isEdited?: boolean;
   isStarred?: boolean;

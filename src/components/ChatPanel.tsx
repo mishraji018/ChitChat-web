@@ -95,6 +95,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const [showBlockConfirm, setShowBlockConfirm] = useState(false);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [replyMessage, setReplyMessage] = useState<{ id: string; senderName?: string; text: string } | null>(null);
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -103,7 +104,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const topObserverRef = useRef<HTMLDivElement>(null);
 
   // ─── [46-75] Hooks ────────────────────────
-  const { messages, sendMessage, markAsRead, loading: mLoading, setMessages } = useMessages(chat?.id || null, chat?.messages || []);
+  const { messages, sendMessage, markAsRead, markAsDelivered, loading: mLoading, setMessages } = useMessages(chat?.id || null, chat?.messages || []);
   const { onlineUsers } = usePresence(currentUser.id);
   const { isTyping: isRecTyping, handleTyping } = useTyping(chat?.id || null, currentUser.id);
   const { streak, updateStreak, justBroken } = useStreak(currentUser.id, chat?.user.id || '');
@@ -126,6 +127,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
     if (chat?.id && currentUser?.id) {
       console.log('[markAsRead] calling for chat:', chat.id, 'user:', currentUser.id);
       markAsRead(chat.id, currentUser.id);
+      markAsDelivered(chat.id, currentUser.id);
     }
   }, [chat?.id, currentUser.id, messages.length]);
 
@@ -183,8 +185,10 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
       return;
     }
     try {
-      console.log('Sending:', { content, chatId: chat.id, userId: currentUser.id, isAI });
-      const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia, undefined, isAI);
+      console.log('Sending:', { content, chatId: chat.id, userId: currentUser.id, isAI, replyMessage });
+      const currentReply = replyMessage;
+      setReplyMessage(null);
+      const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia, undefined, isAI, currentReply);
       await updateStreak();
       if (onSendMessage && data) onSendMessage(chat.id, { 
         id: data.id, 
@@ -195,7 +199,9 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
         createdAt: data.created_at, 
         status: 'sent',
-        is_ai: isAI
+        is_ai: isAI,
+        replyTo: currentReply?.id,
+        replyToMessage: currentReply || undefined
       } as Message);
       return data;
     } catch (err) {
@@ -390,19 +396,37 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                 <p className="text-[var(--text-secondary)] font-medium">Say hi to {nickname || chat.user.displayName}!</p>
               </div>
             ) : (
-              messages
-                .map((m, i) => (
-                <MessageBubble 
-                  key={m.id} 
-                  message={m} 
-                  isSent={m.senderId === currentUser.id} 
-                  t={t} 
-                  currentUser={currentUser} 
-                  searchQuery={searchQuery} 
-                  isHighlighted={searchResults[currentMatch] === i} 
-                  onReact={(e) => onReact?.(chat.id, m.id, e)} 
-                />
-              ))
+              (() => {
+                // Find latest sent message index to show 'Seen' label on the last sent message only
+                let lastSentIndex = -1;
+                for (let i = messages.length - 1; i >= 0; i--) {
+                  if (messages[i].senderId === currentUser.id) {
+                    lastSentIndex = i;
+                    break;
+                  }
+                }
+
+                return messages.map((m, i) => (
+                  <MessageBubble 
+                    key={m.id} 
+                    message={m} 
+                    isSent={m.senderId === currentUser.id} 
+                    t={t} 
+                    currentUser={currentUser} 
+                    searchQuery={searchQuery} 
+                    isHighlighted={searchResults[currentMatch] === i} 
+                    onReact={(e) => onReact?.(chat.id, m.id, e)} 
+                    onReply={(targetMsg) => {
+                      setReplyMessage({
+                        id: targetMsg.id,
+                        senderName: targetMsg.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
+                        text: targetMsg.content || targetMsg.text || 'Attachment'
+                      });
+                    }}
+                    isLatestSentMessage={i === lastSentIndex}
+                  />
+                ));
+              })()
             )}
             {isRecTyping && <TypingIndicator />}<div ref={messagesEndRef} /><div ref={bottomRef} />
           </div>
@@ -420,6 +444,8 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             onOpenAI={() => setShowAIPanel(!showAIPanel)}
             value={inputText}
             onChange={setInputText}
+            replyToMessage={replyMessage}
+            onCancelReply={() => setReplyMessage(null)}
           />
 
           <AIPanel 

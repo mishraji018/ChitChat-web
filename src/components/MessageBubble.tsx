@@ -18,9 +18,29 @@ const fSize = (b?: number) => {
   return k < 1024 ? k.toFixed(1) + ' KB' : (k / 1024).toFixed(1) + ' MB';
 };
 
-interface Props { message: Message; isSent: boolean; t?: any; currentUser: User; searchQuery?: string; isHighlighted?: boolean; onReact?: (emoji: string) => void; }
+interface Props { 
+  message: Message; 
+  isSent: boolean; 
+  t?: any; 
+  currentUser: User; 
+  searchQuery?: string; 
+  isHighlighted?: boolean; 
+  onReact?: (emoji: string) => void;
+  onReply?: (message: Message) => void;
+  isLatestSentMessage?: boolean;
+}
 
-const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHighlighted = false, onReact }: Props) => {
+const MessageBubble = ({ 
+  message, 
+  isSent, 
+  t, 
+  currentUser, 
+  searchQuery = '', 
+  isHighlighted = false, 
+  onReact,
+  onReply,
+  isLatestSentMessage = false
+}: Props) => {
   // ─── [1-15] Helpers ───────────────────────
   const safeT = t || translations['English'];
   const mContent = message.content || (message as any).text || '';
@@ -33,6 +53,30 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
   const highlight = (txt: string, q: string) => {
     if (!q) return txt;
     return txt.split(new RegExp(`(${q})`, 'gi')).map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i} className="bg-purple-500/40 text-[var(--text-primary)] rounded px-0.5 font-bold">{p}</mark> : p);
+  };
+
+  const renderStatus = () => {
+    if (!isSent) return null;
+    if (message.status === 'seen') {
+      return (
+        <span className="flex items-center gap-1 text-[11px] text-cyan-400 font-bold ml-1" title="Seen">
+          <span>✓✓</span>
+          {isLatestSentMessage && <span className="text-[10px] font-semibold opacity-90">Seen</span>}
+        </span>
+      );
+    }
+    if (message.status === 'delivered') {
+      return (
+        <span className="text-[11px] text-white/80 font-bold ml-1 opacity-70" title="Delivered">
+          ✓✓
+        </span>
+      );
+    }
+    return (
+      <span className="text-[11px] text-white/60 font-bold ml-1 opacity-70" title="Sent">
+        ✓
+      </span>
+    );
   };
 
   // ─── [16-160] Render Logic ────────────────
@@ -59,7 +103,19 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
       case 'sticker': return <span className="text-6xl block py-2">{mContent}</span>;
       case 'file':
       case 'document': return <div className="relative">{(up || q || err) && <Status />}<a href={mUrl} download={name} target="_blank" rel="noreferrer" className={`flex items-center gap-3 bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded-xl p-3 min-w-[220px] transition-all border border-purple-500/20 ${up || q || err ? 'blur-[1px]' : ''}`}><div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-xl">📄</div><div className="flex-1 min-w-0"><p className="text-sm font-medium truncate text-[var(--text-primary)]">{name || message.fileName || 'Document'}</p><p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase">{fSize(sz || 0)}</p></div><Download size={18} className="text-purple-400" /></a></div>;
-      default: return <p className={`${isEmoji ? 'text-5xl py-2' : 'text-sm'} leading-relaxed break-words whitespace-pre-wrap`}>{searchQuery ? highlight(mContent, searchQuery) : mContent}</p>;
+      default: return (
+        <div>
+          {message.replyToMessage && (
+            <div className={`mb-2 p-2 rounded-xl text-xs border-l-4 ${isSent ? 'bg-black/15 border-white/80 text-white' : 'bg-black/5 dark:bg-white/10 border-primary text-[var(--text-primary)]'}`}>
+              <p className="font-bold opacity-80">{message.replyToMessage.senderName || 'Replied'}</p>
+              <p className="truncate opacity-90">{message.replyToMessage.text}</p>
+            </div>
+          )}
+          <p className={`${isEmoji ? 'text-5xl py-2' : 'text-sm'} leading-relaxed break-words whitespace-pre-wrap`}>
+            {searchQuery ? highlight(mContent, searchQuery) : mContent}
+          </p>
+        </div>
+      );
     }
   };
 
@@ -75,21 +131,14 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
               <div className={`flex items-center justify-end gap-1.5 mt-1 timestamp-text ${isSent ? 'text-white/60' : 'text-[var(--text-secondary)]'}`}>
                 {message.isEdited && <span className="text-[9px] italic mr-1">edited</span>}
                 <span className="text-[10px] font-medium">{message.timestamp}</span>
-                {isSent && (
-                  <span className="text-[10px] ml-1">
-                    {message.status === 'seen' 
-                      ? <span className="text-cyan-400 font-bold">✓✓</span>
-                      : <span className="font-bold opacity-60">✓</span>
-                    }
-                  </span>
-                )}
+                {renderStatus()}
               </div>
             )}
             {message.reactions && message.reactions.length > 0 && <div className={`absolute -bottom-2 ${isSent ? 'right-2' : 'left-2'} flex gap-1 bg-background/80 backdrop-blur-sm rounded-full px-1.5 py-0.5 shadow-sm border border-border text-[10px]`}>{message.reactions.map((r, i) => <span key={i}>{r.emoji}</span>)}</div>}
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
-          <ContextMenuItem onClick={() => toast.info('Reply soon')} className="gap-2"><Reply size={16} /> {safeT.reply}</ContextMenuItem>
+          <ContextMenuItem onClick={() => onReply?.(message)} className="gap-2"><Reply size={16} /> {safeT.reply}</ContextMenuItem>
           <ContextMenuItem onClick={() => { navigator.clipboard.writeText(mContent); toast.success('Copied!'); }} className="gap-2"><Copy size={16} /> {safeT.copy}</ContextMenuItem>
           <ContextMenuItem onClick={() => toast.info('Forward soon')} className="gap-2"><Forward size={16} /> {safeT.forward}</ContextMenuItem>
           <ContextMenuItem onClick={() => toast.success('Starred!')} className="gap-2"><Star size={16} /> {safeT.star}</ContextMenuItem>

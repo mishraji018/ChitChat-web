@@ -30,6 +30,8 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     createdAt: m.created_at,
     status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus,
+    replyTo: m.reply_to,
+    replyToMessage: m.reply_to_message,
     is_ai: m.is_ai
   }), []);
 
@@ -163,7 +165,16 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
   }, [chatId, mapMsg]);
 
   // ─── [101-160] Event Handlers ───────────────
-  const sendMessage = async (text: string, sId: string, cId: string, type: string = 'text', mData: any = null, mId?: string, isAI: boolean = false) => {
+  const sendMessage = async (
+    text: string, 
+    sId: string, 
+    cId: string, 
+    type: string = 'text', 
+    mData: any = null, 
+    mId?: string, 
+    isAI: boolean = false,
+    replyTo?: { id: string; senderName?: string; text: string } | null
+  ) => {
     if (type === 'text' && (!text || !text.trim())) return;
 
     const payload: any = {
@@ -176,6 +187,8 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
       status: 'sent',
       seen: false,
       is_ai: isAI,
+      reply_to: replyTo?.id || null,
+      reply_to_message: replyTo || null,
       created_at: new Date().toISOString()
     };
 
@@ -206,5 +219,18 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     }
   };
 
-  return { messages, sendMessage, markAsRead, loading, setMessages };
+  const markAsDelivered = async (cId: string, uId: string) => {
+    try {
+      await supabase
+        .from('messages')
+        .update({ status: 'delivered' })
+        .eq('chat_id', cId)
+        .neq('sender_id', uId)
+        .eq('status', 'sent');
+    } catch (err) {
+      console.error('[useMessages] Delivered error:', err);
+    }
+  };
+
+  return { messages, sendMessage, markAsRead, markAsDelivered, loading, setMessages };
 };
