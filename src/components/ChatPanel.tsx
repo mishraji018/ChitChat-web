@@ -120,6 +120,23 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const scroll = (b: ScrollBehavior = 'smooth') => messagesEndRef.current?.scrollIntoView({ behavior: b });
 
   useEffect(() => {
+    if (chat?.messages && chat.messages.length > 0) {
+      setMessages(prev => {
+        // Merge chat.messages into local state if there are any missing messages
+        const existingIds = new Set(prev.map(m => m.id));
+        const newOnes = chat.messages.filter(m => !existingIds.has(m.id));
+        if (newOnes.length > 0) {
+          const merged = [...prev, ...newOnes].sort(
+            (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+          );
+          return merged;
+        }
+        return prev;
+      });
+    }
+  }, [chat?.messages]);
+
+  useEffect(() => {
     if (chat?.id) scroll(messages.length > 0 ? 'smooth' : 'auto');
   }, [chat?.id, messages]);
 

@@ -55,9 +55,18 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         console.error('[useMessages] Fetch error:', error);
       } else {
         const mapped = data?.map(mapMsg) || [];
-        setMessages(mapped);
-        // Cache messages for this chat
-        localStorage.setItem(`messages_${chatId}`, JSON.stringify(mapped));
+        setMessages(prev => {
+          // If server returned messages, use them
+          if (mapped.length > 0) {
+            localStorage.setItem(`messages_${chatId}`, JSON.stringify(mapped));
+            return mapped;
+          }
+          // If server returned 0 messages but we already have preloaded/optimistic messages, don't wipe them!
+          if (prev.length > 0) {
+            return prev;
+          }
+          return [];
+        });
       }
     } catch (err) {
       console.error('[useMessages] unexpected error:', err);
