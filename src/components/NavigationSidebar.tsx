@@ -1,5 +1,4 @@
-import { Home, MessageSquare, Compass, User, Bookmark, Settings, ArrowLeftRight, ChevronDown, LogOut } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { MessageSquare, User, Star, Settings, LogOut, ArrowLeftRight } from 'lucide-react';
 import { User as UserType } from '@/types/chat';
 
 interface NavigationSidebarProps {
@@ -10,76 +9,51 @@ interface NavigationSidebarProps {
 }
 
 const NavigationSidebar = ({ currentUser, activeTab, onTabChange, onLogout }: NavigationSidebarProps) => {
-  const navItems = [
+  const tabs = [
     { id: 'messages', icon: MessageSquare, label: 'Messages' },
-  ];
-
-  const profileItems = [
-    { id: 'profile', icon: User, label: 'Visit Profile' },
+    { id: 'profile', icon: User, label: 'Profile' },
+    { id: 'favourites', icon: Star, label: 'Starred' },
     { id: 'settings', icon: Settings, label: 'Settings' },
-    { id: 'switch', icon: ArrowLeftRight, label: 'Switch Account' },
+    { id: 'switch', icon: ArrowLeftRight, label: 'Switch' },
   ];
 
   return (
-    <div className="w-[200px] h-full bg-[var(--nav-bg)] border-r border-[var(--border-color)] flex flex-col p-3 z-40 shrink-0">
-      {/* Navigation Section */}
-      <div className="space-y-1 mb-8">
-        {navItems.map((item) => (
+    <div className="h-full flex items-center pl-3 py-6 z-40 shrink-0">
+      <div className="w-[72px] h-[85vh] max-h-[580px] bg-[var(--nav-bg,#0a5f62)] rounded-r-[2.2rem] rounded-l-[1.2rem] flex flex-col items-center py-6 shadow-2xl relative border-r border-y border-white/10">
+        {/* Navigation Icon List */}
+        <div className="flex-1 flex flex-col items-center gap-6 justify-center w-full">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onTabChange(tab.id)}
+                title={tab.label}
+                className={`relative p-3.5 rounded-2xl transition-all duration-300 group ${
+                  isActive
+                    ? 'text-white bg-white/20 shadow-md scale-110'
+                    : 'text-white/70 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <tab.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                {isActive && (
+                  <span className="absolute -right-3 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-white rounded-l-full shadow-sm" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Bottom Signout Button */}
+        <div className="pt-4 border-t border-white/10 w-full flex flex-col items-center">
           <button
-            key={item.id}
-            onClick={() => onTabChange(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
-              ${activeTab === item.id
-                ? 'bg-[var(--bg-secondary)] text-purple-400 font-semibold'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}
-            `}
+            onClick={onLogout}
+            title="Sign Out"
+            className="p-3 text-white/70 hover:text-red-300 hover:bg-red-500/20 rounded-2xl transition-all duration-200"
           >
-            <item.icon size={18} strokeWidth={activeTab === item.id ? 2.5 : 2} />
-            <span className="text-[13px]">{item.label}</span>
+            <LogOut size={20} />
           </button>
-        ))}
-      </div>
-
-      {/* User Profile Section */}
-      <div className="flex-1">
-        <div className="px-3 py-2 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">
-          User Profile
         </div>
-        <div className="space-y-1">
-          {profileItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-200 text-[13px]"
-            >
-              <item.icon size={16} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Bottom User Card */}
-      <div className="mt-auto pt-4 border-t border-[var(--border-color)] space-y-2">
-        <div className="bg-[var(--bg-secondary)] p-3 rounded-2xl flex items-center gap-3">
-          <div 
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shadow-lg shrink-0 uppercase"
-            style={{ backgroundColor: currentUser.avatarColor || '#7c3aed' }}
-          >
-            {(currentUser.displayName?.[0] || currentUser.username?.[0] || currentUser.email?.[0] || '?')}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-[12px] font-bold text-[var(--text-primary)] truncate">{currentUser.displayName || currentUser.username || 'User'}</span>
-            <span className="text-[10px] text-[var(--text-secondary)] truncate">{currentUser.email || 'Online'}</span>
-          </div>
-        </div>
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400/60 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-[13px] font-semibold"
-        >
-          <LogOut size={16} />
-          <span>Sign Out</span>
-        </button>
       </div>
     </div>
   );

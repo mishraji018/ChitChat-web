@@ -69,7 +69,7 @@ const MessageBubble = ({ message, isSent, t, currentUser, searchQuery = '', isHi
     <motion.div initial={isSent ? { opacity: 0, x: 20 } : { opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className={`flex w-full mb-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
       <ContextMenu>
         <ContextMenuTrigger className="max-w-[85%] md:max-w-[75%]">
-          <div className={`px-4 py-2.5 rounded-[22px] relative transition-all active:scale-[0.98] ${isHighlighted ? 'ring-2 ring-purple-500/50 ring-offset-2 ring-offset-[var(--bg-primary)]' : ''} ${isEmoji ? 'bg-transparent shadow-none' : isSent ? 'bg-gradient-to-br from-[var(--bubble-sent-from)] to-[var(--bubble-sent-to)] text-white rounded-br-sm shadow-lg shadow-purple-500/10 bubble-sent-override' : 'bg-[var(--bubble-received)] text-[var(--bubble-received-text)] border border-[var(--border-color)] rounded-bl-sm shadow-sm bubble-received-override'}`}>
+          <div className={`px-6 py-3.5 rounded-[2rem] relative transition-all active:scale-[0.98] ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-[var(--bg-primary)]' : ''} ${isEmoji ? 'bg-transparent shadow-none' : isSent ? 'bg-gradient-to-br from-[var(--bubble-sent-from)] to-[var(--bubble-sent-to)] text-[var(--bubble-sent-text,white)] rounded-br-sm shadow-md bubble-sent-override' : 'bg-[var(--bubble-received)] text-[var(--bubble-received-text)] border border-[var(--border-color)] rounded-bl-sm shadow-sm bubble-received-override'}`}>
             {render()}
             {!isEmoji && (
               <div className={`flex items-center justify-end gap-1.5 mt-1 timestamp-text ${isSent ? 'text-white/60' : 'text-[var(--text-secondary)]'}`}>

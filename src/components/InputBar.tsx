@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip, Mic, X, Loader2, Sparkles } from 'lucide-react';
+import { Send, Smile, Paperclip, Mic, X, Loader2, Sparkles, Image } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User } from '@/types/chat';
 import { useAIReply } from '@/hooks/useAIReply';
@@ -144,37 +144,105 @@ const InputBar = ({
       <input type="file" ref={fileRef} className="hidden" onChange={onFile} accept="*/*" />
       
       {isRec ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 h-11"><button onClick={() => stopRec(false)} className="text-[var(--text-secondary)]"><X size={20} /></button><div className="flex items-center gap-2 flex-1 bg-[var(--bg-secondary)] rounded-2xl px-4 h-full border border-red-500/20"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /><span className="text-sm text-red-500 font-bold">{Math.floor(recT/60)}:{(recT%60).toString().padStart(2,'0')}</span><div className="flex items-center gap-0.5 flex-1 justify-center">{Array.from({ length: 20 }).map((_, i) => <motion.div key={i} className="w-[3px] rounded-full bg-purple-500" animate={{ height: [4, 4 + Math.random() * 20, 4] }} transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.03 }} />)}</div></div><button onClick={() => stopRec(true)} className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg"><Send size={20} className="text-white ml-0.5" /></button></motion.div>
-      ) : (
-        <div className={`flex items-center gap-3 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-          <div className="flex-1 bg-[var(--bg-secondary)] rounded-2xl flex items-center px-2 py-1.5 border border-[var(--border-color)] focus-within:border-purple-500/50 transition-all">
-            <button 
-              disabled={disabled} 
-              onClick={() => setShowEmoji(!showEmoji)} 
-              className={cn("p-3 md:p-2.5 transition-colors hover:text-purple-400", showEmoji ? "text-purple-400" : "text-[var(--text-secondary)]")}
-            >
-              <Smile size={22} />
-            </button>
-            <input ref={inRef} type="text" disabled={disabled} value={text} onChange={(e) => { setText(e.target.value); onTyping?.(); }} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), onSendMsg())} placeholder={disabled ? "Blocked" : "Write..."} className="flex-1 bg-transparent border-none px-2 py-2 text-[16px] md:text-[15px] text-[var(--text-primary)] focus:outline-none" />
-            <button disabled={disabled} onClick={() => fileRef.current?.click()} className="p-3 md:p-2.5 text-[var(--text-secondary)] hover:text-purple-400"><Paperclip size={22} /></button>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 h-14 bg-[var(--bg-secondary)] rounded-[1.8rem] px-5 border border-red-500/20 shadow-md">
+          <button onClick={() => stopRec(false)} className="text-[var(--text-secondary)]"><X size={20} /></button>
+          <div className="flex items-center gap-2 flex-1 h-full">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-sm text-red-500 font-bold">{Math.floor(recT/60)}:{(recT%60).toString().padStart(2,'0')}</span>
+            <div className="flex items-center gap-0.5 flex-1 justify-center">
+              {Array.from({ length: 20 }).map((_, i) => (
+                <motion.div key={i} className="w-[3px] rounded-full bg-primary" animate={{ height: [4, 4 + Math.random() * 20, 4] }} transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.03 }} />
+              ))}
+            </div>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <button 
-              disabled={disabled} 
-              onClick={onOpenAI} 
-              className="w-11 h-11 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center justify-center text-purple-400 hover:bg-purple-500/5 transition-all"
+          <button onClick={() => stopRec(true)} className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-lg text-primary-foreground">
+            <Send size={18} className="ml-0.5" />
+          </button>
+        </motion.div>
+      ) : (
+        <div className={`p-3 md:p-4 rounded-[2rem] border border-[var(--border-color)] bg-[var(--input-bg,#ffffff)]/10 backdrop-blur-md shadow-lg transition-all focus-within:ring-2 focus-within:ring-white/20 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="relative">
+            <textarea
+              ref={inRef as any}
+              rows={2}
+              disabled={disabled}
+              value={text}
+              onChange={(e) => { setText(e.target.value); onTyping?.(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  onSendMsg();
+                }
+              }}
+              placeholder={disabled ? "Blocked" : "Write your message...."}
+              className="w-full bg-transparent border-none outline-none resize-none px-3 pt-2 text-[15px] md:text-[16px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] placeholder:opacity-60"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-1 px-1">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onOpenAI}
+              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5 transition-all"
             >
-              <Sparkles size={20} />
+              <Sparkles size={14} className="text-yellow-300" />
+              <span>Blink AI</span>
             </button>
-            
-            {text.trim() || sFile ? (
-              <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} onClick={onSendMsg} disabled={disabled} className="w-11 h-11 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg">
-                <Send size={18} className="text-white ml-0.5" />
-              </motion.button>
-            ) : (
-              <button onMouseDown={startRec} disabled={disabled} className="w-11 h-11 rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-secondary)] hover:text-purple-400 transition-colors"><Mic size={22} /></button>
-            )}
+
+            <div className="flex items-center gap-1.5 text-[var(--text-primary)]">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => setShowEmoji(!showEmoji)}
+                className={cn("p-2 rounded-xl transition-all hover:bg-white/10", showEmoji ? "text-primary bg-white/10" : "opacity-80 hover:opacity-100")}
+                title="Emoji"
+              >
+                <Smile size={20} />
+              </button>
+
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => fileRef.current?.click()}
+                className="p-2 rounded-xl transition-all hover:bg-white/10 opacity-80 hover:opacity-100"
+                title="Attach document or file"
+              >
+                <Paperclip size={20} />
+              </button>
+
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => fileRef.current?.click()}
+                className="p-2 rounded-xl transition-all hover:bg-white/10 opacity-80 hover:opacity-100"
+                title="Attach media image"
+              >
+                <Image size={20} />
+              </button>
+
+              {text.trim() || sFile ? (
+                <button
+                  type="button"
+                  onClick={onSendMsg}
+                  disabled={disabled}
+                  className="ml-1 p-2.5 rounded-full bg-white text-[var(--bg-primary)] shadow-md hover:scale-105 active:scale-95 transition-all"
+                  title="Send message"
+                >
+                  <Send size={18} className="ml-0.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onMouseDown={startRec}
+                  disabled={disabled}
+                  className="p-2 rounded-xl transition-all hover:bg-white/10 opacity-80 hover:opacity-100"
+                  title="Voice note"
+                >
+                  <Mic size={20} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

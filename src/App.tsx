@@ -8,7 +8,6 @@ import SplashScreen from "@/components/SplashScreen";
 import LoginScreen from "@/components/LoginScreen";
 import UsernameScreen from "@/components/UsernameScreen";
 import { supabase } from "@/config/supabase";
-import { syncGoogleAuth, completeGoogleSignup } from "@/services/authService";
 import { useLanguage } from "@/hooks/use-language";
 import { useInternet } from '@/hooks/use-internet';
 import NoInternet from '@/components/NoInternet';

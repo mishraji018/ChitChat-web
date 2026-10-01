@@ -65,36 +65,36 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
   // ─── [61-148] Render ──────────────────────
   return (
     <>
-      <div onClick={onClick} onContextMenu={hCtx} className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer relative transition-all group mx-2 my-1 rounded-2xl ${isActive ? 'bg-[var(--bg-secondary)] shadow-lg border border-[var(--border-color)]' : 'hover:bg-[var(--bg-secondary)]/50'}`}>
+      <div onClick={onClick} onContextMenu={hCtx} className={`flex items-center gap-3 px-4 py-3 cursor-pointer relative transition-all group mx-3 my-1 rounded-2xl ${isActive ? 'bg-black/5 dark:bg-white/10 shadow-sm' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}>
         <div className="relative shrink-0">
-          <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isO} className="w-12 h-12" />
-          {isO && <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[var(--bg-primary)]" />}
+          <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isO} className="w-11 h-11" />
+          {isO && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[var(--chat-list-bg,#ffffff)]" />}
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-center mb-1">
+          <div className="flex justify-between items-center mb-0.5">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <h3 className={`font-bold text-[14px] truncate ${isActive ? 'text-purple-400' : 'text-[var(--text-primary)]'}`}>
+              <h3 className={`font-bold text-[14px] truncate ${isActive ? 'text-[var(--bg-primary)] font-extrabold' : 'text-[var(--chat-list-text,#111111)]'}`}>
                 {nick}
               </h3>
-              {isMuted && <BellOff size={12} className="text-[var(--text-secondary)] shrink-0" />}
-              {isPinned && <Pin size={12} className="text-purple-500 rotate-45 shrink-0" />}
+              {isMuted && <BellOff size={12} className="text-[var(--chat-list-subtext,#666666)] opacity-60 shrink-0" />}
+              {isPinned && <Pin size={12} className="text-[var(--bg-primary)] rotate-45 shrink-0" />}
             </div>
-            <span className={`text-[10px] shrink-0 font-medium ${uCount > 0 ? 'text-purple-400' : 'text-[var(--text-secondary)]'}`}>
+            <span className={`text-[10px] shrink-0 font-medium ${uCount > 0 ? 'text-[var(--bg-primary)] font-bold' : 'text-[var(--chat-list-subtext,#666666)] opacity-70'}`}>
               {last?.timestamp || ''}
             </span>
           </div>
           
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-              {isMe && last && <span className={`text-[11px] font-bold ${last.status === 'seen' ? 'text-cyan-400' : 'text-[var(--text-secondary)] opacity-60'}`}>{last.status === 'seen' ? '✓✓' : '✓'}</span>}
+              {isMe && last && <span className={`text-[11px] font-bold ${last.status === 'seen' ? 'text-teal-600' : 'text-[var(--chat-list-subtext,#666666)] opacity-60'}`}>{last.status === 'seen' ? '✓✓' : '✓'}</span>}
               {renderIcon()}
-              <span className="text-[12px] text-[var(--text-secondary)] truncate font-medium">{getPText()}</span>
+              <span className="text-[12px] text-[var(--chat-list-subtext,#666666)] truncate font-medium">{getPText()}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              {uCount > 0 && !isActive && <span className="bg-orange-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg shadow-orange-500/20">{uCount}</span>}
-              {isPinned && !isActive && <div className="w-1.5 h-1.5 bg-purple-500 rounded-full" />}
-              <ChevronRight size={14} className="text-[var(--text-secondary)] md:hidden" />
+              {uCount > 0 && !isActive && <span className="bg-[var(--bg-primary)] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">{uCount}</span>}
+              {isPinned && !isActive && <div className="w-1.5 h-1.5 bg-[var(--bg-primary)] rounded-full" />}
+              <ChevronRight size={14} className="text-[var(--chat-list-subtext,#666666)] opacity-40 md:hidden" />
             </div>
           </div>
         </div>

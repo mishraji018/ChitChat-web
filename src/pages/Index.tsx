@@ -572,9 +572,29 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               )}
             </div>
           ) : (
-            <>
-              {/* Main Chat Panel */}
-              <div className="flex-1 h-full bg-chat relative overflow-hidden">
+            <div className="flex-1 h-full flex p-3 md:p-5 gap-4 overflow-hidden bg-[var(--bg-primary)]">
+              {/* Left Floating Card - Chat List Sidebar */}
+              <div className="w-[360px] lg:w-[400px] h-full flex flex-col rounded-[2.2rem] bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] shadow-2xl overflow-hidden shrink-0 border border-black/5 dark:border-white/10 transition-all">
+                <ChatListSidebar
+                  chats={sortedChats}
+                  selectedChatId={selectedChatId}
+                  onSelectChat={handleSelectChat}
+                  onOpenProfile={() => setShowProfile(true)}
+                  onNewChat={() => {}}
+                  onStartChat={handleStartChat}
+                  onOpenNewGroup={() => setShowNewGroup(true)}
+                  onLogout={onLogout}
+                  onOpenSettings={() => setShowSettings(true)}
+                  onOpenAI={() => setShowAI(true)}
+                  t={t}
+                  currentUser={currentUser}
+                  activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
+                  globalSearch={globalSearch}
+                />
+              </div>
+
+              {/* Right Main Chat Panel */}
+              <div className="flex-1 h-full rounded-[2.2rem] bg-[var(--bg-primary)] border border-[var(--border-color)] relative overflow-hidden flex flex-col shadow-inner">
                 {selectedChatId ? (
                   <ChatPanel
                     key={selectedChatId || 'none'}
@@ -604,38 +624,18 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     allChats={chats}
                   />
                 ) : (
-                  <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
-                    <div className="w-24 h-24 rounded-[32px] bg-white/5 flex items-center justify-center mb-6 border border-white/10">
-                      <MessageSquare size={48} className="text-white/20" />
+                  <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-transparent">
+                    <div className="w-24 h-24 rounded-[32px] bg-white/10 flex items-center justify-center mb-6 border border-white/20 shadow-lg">
+                      <MessageSquare size={48} className="text-white/80" />
                     </div>
-                    <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Select a friend to start chatting</h1>
+                    <h1 className="text-3xl font-extrabold text-[var(--text-primary)] mb-3 tracking-tight">Select a conversation</h1>
                     <p className="max-w-md text-[var(--text-secondary)] text-sm leading-relaxed">
-                      Choose a conversation from the list or start a new one to begin your secure, encrypted messaging experience.
+                      Choose a chat from the left panel to begin messaging with end-to-end realtime encryption.
                     </p>
                   </div>
                 )}
               </div>
-
-              {/* Right Sidebar - Chat List */}
-              <div className="w-[340px] border-l border-[var(--border-color)] bg-[var(--bg-primary)] h-full relative shrink-0">
-                <ChatListSidebar
-                  chats={sortedChats}
-                  selectedChatId={selectedChatId}
-                  onSelectChat={handleSelectChat}
-                  onOpenProfile={() => setShowProfile(true)}
-                  onNewChat={() => {}}
-                  onStartChat={handleStartChat}
-                  onOpenNewGroup={() => setShowNewGroup(true)}
-                  onLogout={onLogout}
-                  onOpenSettings={() => setShowSettings(true)}
-                  onOpenAI={() => setShowAI(true)}
-                  t={t}
-                  currentUser={currentUser}
-                  activeFilter={activeTab === 'archived' ? 'archived' : 'all'}
-                  globalSearch={globalSearch}
-                />
-              </div>
-            </>
+            </div>
           )}
         </div>
       </div>

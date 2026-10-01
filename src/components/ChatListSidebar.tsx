@@ -178,26 +178,26 @@ const ChatListSidebar = ({
   }, [processedChats, showArchived, filter, activeSearch]);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[var(--bg-primary)] border-r border-[var(--border-color)] relative overflow-hidden">
+    <div className="w-full h-full flex flex-col bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] relative overflow-hidden">
       <div className="teal-chat-list-inner flex flex-col h-full w-full">
       {/* New Redesigned Header */}
       <div className="px-6 pt-6 pb-2">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             {showArchived && (
-              <button onClick={() => setShowArchived(false)} className="p-2 -ml-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+              <button onClick={() => setShowArchived(false)} className="p-2 -ml-2 text-[var(--chat-list-subtext,#666666)] hover:opacity-80">
                 <ArrowLeft size={20} />
               </button>
             )}
             {!showArchived ? (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 bg-[var(--bg-primary)] rounded-xl flex items-center justify-center text-white shadow-md">
                   <Zap size={18} fill="currentColor" />
                 </div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Blink</h1>
+                <h1 className="text-2xl font-black text-[var(--chat-list-text,#111111)] tracking-tight">Blink</h1>
               </div>
             ) : (
-              <h1 className="text-xl font-bold text-[var(--text-primary)]">Archived</h1>
+              <h1 className="text-xl font-bold text-[var(--chat-list-text,#111111)]">Archived</h1>
             )}
           </div>
           
@@ -265,20 +265,20 @@ const ChatListSidebar = ({
           </div>
         </div>
 
-        {/* Search Bar - Full Width, Dark */}
+        {/* Search Bar - Rounded Pill */}
         <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] group-focus-within:text-purple-500 transition-colors" size={18} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--chat-list-subtext,#666666)] opacity-70 group-focus-within:opacity-100 transition-opacity" size={17} />
           <input
             type="text"
             placeholder={showArchived ? "Search archived..." : "Search messages..."}
-            className="w-full bg-[var(--bg-secondary)] border border-transparent focus:border-purple-500/30 rounded-2xl py-3 pl-12 pr-10 text-sm focus:outline-none transition-all placeholder:text-[var(--text-secondary)] text-[var(--text-primary)]"
+            className="w-full bg-black/5 dark:bg-white/10 border border-transparent focus:border-black/10 dark:focus:border-white/20 rounded-2xl py-2.5 pl-11 pr-10 text-sm focus:outline-none transition-all placeholder:text-[var(--chat-list-subtext,#666666)] text-[var(--chat-list-text,#111111)]"
             value={activeSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
           />
           {activeSearch && (
             <button 
               onClick={() => { setLocalSearch(''); }} 
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--chat-list-subtext,#666666)] hover:opacity-100 p-1"
             >
               <X size={14} />
             </button>
@@ -288,13 +288,16 @@ const ChatListSidebar = ({
 
       {/* Filters */}
       {!showArchived && (
-        <div className="flex items-center gap-2 px-6 py-2 overflow-x-auto scrollbar-none mb-2 mt-2">
+        <div className="flex items-center gap-1.5 px-6 py-2 overflow-x-auto scrollbar-none mb-1">
           {filters.map(f => (
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all
-                ${filter === f.key ? 'bg-purple-600 text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-white/5'}`}
+              className={`px-3.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                filter === f.key
+                  ? 'bg-[var(--bg-primary)] text-white shadow-sm'
+                  : 'bg-black/5 dark:bg-white/10 text-[var(--chat-list-subtext,#666666)] hover:bg-black/10'
+              }`}
             >
               {f.label}
             </button>
