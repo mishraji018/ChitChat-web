@@ -32,10 +32,7 @@ interface IndexProps {
 const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguageChange }: IndexProps) => {
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<MobileTab>('chats');
-  const [chats, setChats] = useState(() => {
-    const saved = localStorage.getItem('blinkchat_conversations');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [chats, setChats] = useState<any[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   
   useEffect(() => {
@@ -47,7 +44,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             *,
             participant1:users!chats_participant1_id_fkey(*),
             participant2:users!chats_participant2_id_fkey(*),
-            messages:messages(text, type, created_at, seen, status, sender_id)
+            messages:messages(id, text, type, created_at, seen, status, sender_id)
           `)
           .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
           .order('created_at', { ascending: false });
@@ -60,10 +57,11 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           const mappedChats = data.map((conv: any) => {
             const otherParticipant = conv.participant1_id === currentUser.id ? conv.participant2 : conv.participant1;
             
-            // Get the last message if exists
-            const lastMsg = conv.messages && conv.messages.length > 0 
-              ? conv.messages[conv.messages.length - 1] 
-              : null;
+            // Get the last message — sort by created_at descending and pick first
+            const sortedMsgs = (conv.messages || []).sort(
+              (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            const lastMsg = sortedMsgs.length > 0 ? sortedMsgs[0] : null;
 
             return {
               id: conv.id,
@@ -187,7 +185,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark', 'theme-deep-blue', 'theme-rose');
+    root.classList.remove('light', 'dark', 'theme-deep-blue', 'theme-rose', 'theme-teal');
     
     // Set data-theme for the new variable system
     root.setAttribute('data-theme', currentTheme);
@@ -195,6 +193,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     if (currentTheme === 'dark') root.classList.add('dark');
     else if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
     else if (currentTheme === 'rose') root.classList.add('theme-rose');
+    else if (currentTheme === 'teal') root.classList.add('theme-teal');
     else root.classList.add('theme-light');
     
     localStorage.setItem('blinkchat_theme', currentTheme);
@@ -244,7 +243,8 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               mediaName: newMessage.media_name,
               uploadStatus: newMessage.upload_status || 'done',
               timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              status: (newMessage.seen ? 'seen' : 'sent') as MessageStatus
+              createdAt: newMessage.created_at,
+              status: (newMessage.status || (newMessage.seen ? 'seen' : 'sent')) as MessageStatus
             };
 
             if (!chat.messages.some((m: any) => m.id === mappedMsg.id)) {
@@ -314,54 +314,25 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     localStorage.setItem('blinkchat_conversations', JSON.stringify(chats));
   }, [chats]);
 
-  // Fetch messages when selectedChatId changes
+  // Note: Message fetching is handled by the useMessages hook in ChatPanel.
+  // We only mark messages as read when selecting a chat.
   useEffect(() => {
     if (!selectedChatId) return;
 
-    const fetchMessages = async () => {
+    const markAsRead = async () => {
       try {
-        const { data, error } = await supabase
+        await supabase
           .from('messages')
-          .select('*')
+          .update({ status: 'seen', seen: true })
           .eq('chat_id', selectedChatId)
-          .order('created_at', { ascending: true });
-
-        if (error) throw error;
-        
-        if (data) {
-          const mapped = data.map(m => ({
-            id: m.id,
-            senderId: m.sender_id,
-            text: m.text,
-            content: m.text,
-            type: m.type || 'text',
-            mediaUrl: m.media_url,
-            mediaType: m.media_type,
-            mediaSize: m.media_size,
-            mediaName: m.media_name,
-            uploadStatus: m.upload_status || 'done',
-            timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: m.seen ? 'seen' : 'sent'
-          }));
-
-          setChats((prev: any) => prev.map((c: any) => 
-            c.id === selectedChatId ? { ...c, messages: mapped, unreadCount: 0 } : c
-          ));
-          
-          // Mark as read
-          await supabase
-            .from('messages')
-            .update({ status: 'seen', seen: true })
-            .eq('chat_id', selectedChatId)
-            .neq('sender_id', currentUser.id)
-            .or('status.neq.seen,status.is.null');
-        }
+          .neq('sender_id', currentUser.id)
+          .or('status.neq.seen,status.is.null');
       } catch (err) {
-        console.error('Failed to fetch messages:', err);
+        console.error('Failed to mark messages as read:', err);
       }
     };
 
-    fetchMessages();
+    markAsRead();
   }, [selectedChatId]);
 
   const handleStartChat = async (user: User) => {
@@ -633,12 +604,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     allChats={chats}
                   />
                 ) : (
-                  <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[#0f0f0f]">
-                    <div className="w-24 h-24 rounded-[32px] bg-purple-500/5 flex items-center justify-center mb-6 border border-purple-500/10">
-                      <MessageSquare size={48} className="text-purple-500/40" />
+                  <div className="flex-1 h-full flex flex-col items-center justify-center p-8 text-center bg-[var(--bg-primary)]">
+                    <div className="w-24 h-24 rounded-[32px] bg-white/5 flex items-center justify-center mb-6 border border-white/10">
+                      <MessageSquare size={48} className="text-white/20" />
                     </div>
-                    <h1 className="text-3xl font-bold text-zinc-100 mb-4 tracking-tight">Select a friend to start chatting</h1>
-                    <p className="max-w-md text-zinc-500 text-sm leading-relaxed">
+                    <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-4 tracking-tight">Select a friend to start chatting</h1>
+                    <p className="max-w-md text-[var(--text-secondary)] text-sm leading-relaxed">
                       Choose a conversation from the list or start a new one to begin your secure, encrypted messaging experience.
                     </p>
                   </div>
@@ -646,7 +617,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
               </div>
 
               {/* Right Sidebar - Chat List */}
-              <div className="w-[340px] border-l border-border bg-white h-full relative shrink-0">
+              <div className="w-[340px] border-l border-[var(--border-color)] bg-[var(--bg-primary)] h-full relative shrink-0">
                 <ChatListSidebar
                   chats={sortedChats}
                   selectedChatId={selectedChatId}

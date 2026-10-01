@@ -60,10 +60,10 @@ interface ChatPanelProps {
 
 const TypingIndicator = () => (
   <div className="flex justify-start px-4 mb-2">
-    <div className="bg-[#1e1e1e] border border-white/5 rounded-2xl rounded-bl-md px-4 py-2.5 shadow-sm">
+    <div className="bg-[var(--bubble-received)] border border-[var(--border-color)] rounded-2xl rounded-bl-md px-4 py-2.5 shadow-sm bubble-received-override">
       <div className="flex gap-1.5 items-center">
         {[0, 1, 2].map(i => (
-          <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-purple-500/60"
+          <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-white/60"
             animate={{ scale: [0.7, 1, 0.7], opacity: [0.3, 1, 0.3] }}
             transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
           />

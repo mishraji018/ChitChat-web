@@ -23,10 +23,11 @@ interface SettingsPanelProps {
 }
 
 const themes: { key: ThemeType; label: string; fill: string; border: string }[] = [
-  { key: 'dark',      label: 'Dark',      fill: '#0d0a0f', border: '#f472b6' },
-  { key: 'deep-blue', label: 'Deep Blue', fill: '#0a1628', border: '#4f8ef7' },
-  { key: 'light',     label: 'Light',     fill: '#f4f6fa', border: '#00b894' },
+  { key: 'dark',      label: 'Dark',      fill: '#0d0d0f', border: '#7c3aed' },
+  { key: 'deep-blue', label: 'Ocean',     fill: '#0a1628', border: '#4f8ef7' },
+  { key: 'light',     label: 'Light',     fill: '#f4f6fa', border: '#0d7377' },
   { key: 'rose',      label: 'Rose',      fill: '#1a0a0f', border: '#f472b6' },
+  { key: 'teal',      label: 'Teal',      fill: '#0d7377', border: '#14b8a6' },
 ];
 
 const languages = ['English', 'Hindi', 'Spanish', 'French'];
@@ -206,7 +207,7 @@ const SettingsPanel = ({ isOpen, onClose, currentTheme, onThemeChange, language,
         {/* Theme Section */}
         <div className="px-4 py-4">
           <label className="text-xs font-semibold text-primary uppercase tracking-wider mb-4 block">Theme</label>
-          <div className="flex gap-5">
+          <div className="flex flex-wrap gap-4">
             {themes.map(t => (
               <button key={t.key} onClick={() => onThemeChange(t.key)}
                 className="flex flex-col items-center gap-1.5">

@@ -179,6 +179,7 @@ const ChatListSidebar = ({
 
   return (
     <div className="w-full h-full flex flex-col bg-[var(--bg-primary)] border-r border-[var(--border-color)] relative overflow-hidden">
+      <div className="teal-chat-list-inner flex flex-col h-full w-full">
       {/* New Redesigned Header */}
       <div className="px-6 pt-6 pb-2">
         <div className="flex items-center justify-between mb-6">
@@ -445,6 +446,7 @@ const ChatListSidebar = ({
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 };

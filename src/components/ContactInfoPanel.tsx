@@ -93,26 +93,47 @@ const ContactInfoPanel = ({
   // Fetch all media and documents from Supabase
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [docsList, setDocsList] = useState<any[]>([]);
+  const [isLoadingMedia, setIsLoadingMedia] = useState(true);
 
   useEffect(() => {
     const fetchSharedContent = async () => {
       if (!chat.id) return;
       
+      setIsLoadingMedia(true);
+      setMediaList([]);
+      setDocsList([]);
+
       const { data, error } = await supabase
         .from('messages')
-        .select('media_url, media_type, media_name, media_size, created_at, text, type')
+        .select('media_url, media_type, media_name, media_size, created_at, text, type, sender_id')
         .eq('chat_id', chat.id)
         .not('media_url', 'is', null)
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        setMediaList(data.filter(m => m.media_type?.startsWith('image') || m.type === 'image'));
-        setDocsList(data.filter(m => m.media_type === 'document' || m.type === 'document' || m.type === 'file'));
+        // Filter for privacy: only show media/docs sent by the contact
+        const contactData = data.filter(m => m.sender_id === user.id);
+
+        const media = contactData.filter(m => {
+          const mt = (m.media_type || m.type || '').toLowerCase();
+          return mt.startsWith('image') || mt.startsWith('video') || mt.startsWith('audio') 
+            || mt === 'image' || mt === 'video' || mt === 'voice' || mt === 'audio';
+        });
+        const docs = contactData.filter(m => {
+          const mt = (m.media_type || m.type || '').toLowerCase();
+          return mt === 'document' || mt === 'file' 
+            || mt.includes('pdf') || mt.includes('word') || mt.includes('text')
+            || mt.includes('spreadsheet') || mt.includes('excel') || mt.includes('csv')
+            || mt.includes('zip') || mt.includes('application');
+        });
+        setMediaList(media);
+        setDocsList(docs);
       }
+      setIsLoadingMedia(false);
     };
 
     fetchSharedContent();
-  }, [chat.id]);
+  }, [chat.id, user.id]);
 
   // Filter messages for this conversation only
   const conversationMessages = useMemo(() => 
@@ -245,14 +266,32 @@ const ContactInfoPanel = ({
               )}
             </div>
             <div className="grid grid-cols-3 gap-1.5">
-              {mediaList.slice(0, 6).map((media, i) => (
-                <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity">
-                  <img src={media.media_url} alt={`Shared ${i}`} className="w-full h-full object-cover" />
+              {mediaList.slice(0, 6).map((media, i) => {
+                const isVideo = (media.media_type || media.type || '').toLowerCase().startsWith('video');
+                return (
+                  <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity relative">
+                    {isVideo ? (
+                      <>
+                        <video src={media.media_url} className="w-full h-full object-cover" muted />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                            <span className="text-black text-xs ml-0.5">▶</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <img src={media.media_url} alt={`Shared ${i}`} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                );
+              })}
+              {isLoadingMedia ? (
+                <div className="col-span-3 flex justify-center py-6">
+                  <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
                 </div>
-              ))}
-              {mediaList.length === 0 && (
+              ) : mediaList.length === 0 ? (
                 <p className="col-span-3 text-sm text-muted-foreground text-center py-4 italic">No media shared yet</p>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -274,9 +313,13 @@ const ContactInfoPanel = ({
                   </a>
                 </div>
               ))}
-              {docsList.length === 0 && (
+              {isLoadingMedia ? (
+                <div className="flex justify-center py-4">
+                  <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                </div>
+              ) : docsList.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-2 italic">No documents shared</p>
-              )}
+              ) : null}
             </div>
           </div>
 

@@ -66,7 +66,7 @@ export const MemoryCapsuleList = ({ chatId }: MemoryCapsuleListProps) => {
           <History size={20} />
         </button>
       </SheetTrigger>
-      <SheetContent side="right" className="bg-[#0f0f0f] border-white/5 text-zinc-100 p-0 w-full sm:max-w-md overflow-hidden flex flex-col">
+      <SheetContent side="right" className="bg-[#0f0f0f] border-white/5 text-zinc-100 p-0 w-full sm:max-w-md overflow-hidden flex flex-col z-[200] !fixed">
         <SheetHeader className="p-6 border-b border-white/5">
           <SheetTitle className="text-xl font-bold text-zinc-100 flex items-center gap-2">
             Memory Vault <span className="text-2xl">🏛️</span>

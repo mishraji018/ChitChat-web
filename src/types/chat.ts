@@ -1,6 +1,6 @@
 export type MessageType = 'text' | 'image' | 'document' | 'voice' | 'video' | 'audio' | 'file' | 'location' | 'sticker';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen' | 'queued' | 'error';
-export type ThemeType = 'dark' | 'deep-blue' | 'light' | 'rose';
+export type ThemeType = 'dark' | 'deep-blue' | 'light' | 'rose' | 'teal';
 
 export interface User {
   id: string;

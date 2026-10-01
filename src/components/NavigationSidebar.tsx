@@ -21,15 +21,17 @@ const NavigationSidebar = ({ currentUser, activeTab, onTabChange, onLogout }: Na
   ];
 
   return (
-    <div className="w-[200px] h-full bg-[#0f0f0f] border-r border-white/5 flex flex-col p-3 z-40 shrink-0">
+    <div className="w-[200px] h-full bg-[var(--nav-bg)] border-r border-[var(--border-color)] flex flex-col p-3 z-40 shrink-0">
       {/* Navigation Section */}
       <div className="space-y-1 mb-8">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => onTabChange(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-300 group
-              ${activeTab === item.id ? 'bg-[#1a1a1a] text-purple-400 font-semibold shadow-lg shadow-purple-500/5' : 'text-zinc-500 hover:bg-[#1a1a1a] hover:text-zinc-300'}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group
+              ${activeTab === item.id
+                ? 'bg-[var(--bg-secondary)] text-purple-400 font-semibold'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'}
             `}
           >
             <item.icon size={18} strokeWidth={activeTab === item.id ? 2.5 : 2} />
@@ -40,7 +42,7 @@ const NavigationSidebar = ({ currentUser, activeTab, onTabChange, onLogout }: Na
 
       {/* User Profile Section */}
       <div className="flex-1">
-        <div className="px-3 py-2 text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">
+        <div className="px-3 py-2 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">
           User Profile
         </div>
         <div className="space-y-1">
@@ -48,7 +50,7 @@ const NavigationSidebar = ({ currentUser, activeTab, onTabChange, onLogout }: Na
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-zinc-500 hover:bg-[#1a1a1a] hover:text-zinc-200 transition-all duration-200 text-[13px]`}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-all duration-200 text-[13px]"
             >
               <item.icon size={16} />
               <span>{item.label}</span>
@@ -58,22 +60,22 @@ const NavigationSidebar = ({ currentUser, activeTab, onTabChange, onLogout }: Na
       </div>
 
       {/* Bottom User Card */}
-      <div className="mt-auto pt-4 border-t border-white/5 space-y-2">
-        <div className="bg-[#1a1a1a] p-3 rounded-2xl flex items-center gap-3">
+      <div className="mt-auto pt-4 border-t border-[var(--border-color)] space-y-2">
+        <div className="bg-[var(--bg-secondary)] p-3 rounded-2xl flex items-center gap-3">
           <div 
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shadow-lg shrink-0 uppercase"
-            style={{ backgroundColor: currentUser.avatarColor || '#3b82f6' }}
+            style={{ backgroundColor: currentUser.avatarColor || '#7c3aed' }}
           >
             {(currentUser.displayName?.[0] || currentUser.username?.[0] || currentUser.email?.[0] || '?')}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-[12px] font-bold text-zinc-200 truncate">{currentUser.displayName || currentUser.username || 'User'}</span>
-            <span className="text-[10px] text-zinc-500 truncate">{currentUser.email || 'Online'}</span>
+            <span className="text-[12px] font-bold text-[var(--text-primary)] truncate">{currentUser.displayName || currentUser.username || 'User'}</span>
+            <span className="text-[10px] text-[var(--text-secondary)] truncate">{currentUser.email || 'Online'}</span>
           </div>
         </div>
         <button 
           onClick={onLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400/70 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-[13px] font-semibold"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400/60 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-[13px] font-semibold"
         >
           <LogOut size={16} />
           <span>Sign Out</span>

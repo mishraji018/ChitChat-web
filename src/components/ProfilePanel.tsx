@@ -114,12 +114,12 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
         animate={{ x: 0 }}
         exit={{ x: '-100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="relative w-full max-w-[340px] h-full bg-[#0f0f0f] border-r border-white/10 flex flex-col pointer-events-auto shadow-2xl"
+        className="relative w-full max-w-[340px] h-full bg-[var(--bg-primary)] border-r border-[var(--border-color)] flex flex-col pointer-events-auto shadow-2xl"
       >
         {/* Header */}
-        <div className="p-6 flex items-center justify-between border-b border-white/5">
-          <h2 className="text-xl font-bold text-white">Profile</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors text-2xl font-light">×</button>
+        <div className="p-6 flex items-center justify-between border-b border-[var(--border-color)]">
+          <h2 className="text-xl font-bold text-[var(--text-primary)]">Profile</h2>
+          <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-2xl font-light">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-none">
@@ -166,21 +166,21 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
             )}
 
             <div>
-              <h3 className="text-2xl font-black text-white tracking-tight">{user?.displayName || user?.username || 'User'}</h3>
-              <p className="text-sm text-zinc-500 font-medium">{user?.email}</p>
+              <h3 className="text-2xl font-black text-[var(--text-primary)] tracking-tight">{user?.displayName || user?.username || 'User'}</h3>
+              <p className="text-sm text-[var(--text-secondary)] font-medium">{user?.email}</p>
             </div>
           </div>
 
           {/* Bio Section */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">About</label>
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">About</label>
             {isEditing ? (
               <div className="space-y-2">
                 <textarea
                   autoFocus
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
-                  className="w-full bg-[#1a1a1a] border border-purple-500/30 rounded-2xl p-4 text-sm text-zinc-300 outline-none focus:ring-2 focus:ring-purple-500/20 resize-none"
+                  className="w-full bg-[var(--bg-secondary)] border border-purple-500/30 rounded-2xl p-4 text-sm text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-purple-500/20 resize-none"
                   rows={3}
                 />
                 <button 
@@ -193,7 +193,7 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
             ) : (
               <div 
                 onClick={() => setIsEditing(true)}
-                className="bg-[#1a1a1a] border border-white/5 rounded-2xl p-4 text-sm text-zinc-400 hover:bg-white/5 cursor-pointer transition-all"
+                className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-4 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all"
               >
                 {bio}
               </div>
@@ -202,9 +202,9 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
 
           {/* Theme Toggle */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Settings</label>
-            <div className="flex items-center justify-between bg-[#1a1a1a] border border-white/5 rounded-2xl p-4">
-              <span className="text-sm font-bold text-zinc-200">Dark Mode</span>
+            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Settings</label>
+            <div className="flex items-center justify-between bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-4">
+              <span className="text-sm font-bold text-[var(--text-primary)]">Dark Mode</span>
               <button 
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                 className={`w-12 h-6 rounded-full transition-all relative ${theme === 'dark' ? 'bg-purple-600' : 'bg-zinc-700'}`}
@@ -216,7 +216,7 @@ const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) =
         </div>
 
         {/* Sign Out */}
-        <div className="p-6 border-t border-white/5">
+        <div className="p-6 border-t border-[var(--border-color)]">
           <button 
             onClick={onSignOut}
             className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-rose-600/20"

@@ -54,7 +54,7 @@ export const useMessages = (chatId: string | null) => {
         const mapped = data?.map(mapMsg) || [];
         setMessages(mapped);
         // Cache messages for this chat
-        sessionStorage.setItem(`messages_${chatId}`, JSON.stringify(mapped));
+        localStorage.setItem(`messages_${chatId}`, JSON.stringify(mapped));
       }
     } catch (err) {
       console.error('[useMessages] unexpected error:', err);
@@ -72,7 +72,7 @@ export const useMessages = (chatId: string | null) => {
     }
 
     // 1. Load from cache first for instant display
-    const cached = sessionStorage.getItem(`messages_${chatId}`);
+    const cached = localStorage.getItem(`messages_${chatId}`);
     if (cached) {
       try {
         setMessages(JSON.parse(cached));
@@ -112,7 +112,7 @@ export const useMessages = (chatId: string | null) => {
         setMessages(prev => {
           const exists = prev.some(m => m.id === mapped.id);
           const next = exists ? prev : [...prev, mapped];
-          sessionStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
+          localStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
           return next;
         });
       })
@@ -130,7 +130,7 @@ export const useMessages = (chatId: string | null) => {
             status: up.status as MessageStatus,
             seen: up.seen 
           } : m);
-          sessionStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
+          localStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
           return next;
         });
       })
