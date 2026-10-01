@@ -80,7 +80,7 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
               {isMuted && <BellOff size={12} className="text-[var(--chat-list-subtext,#666666)] opacity-60 shrink-0" />}
               {isPinned && <Pin size={12} className="text-[var(--bg-primary)] rotate-45 shrink-0" />}
             </div>
-            <span className={`text-[10px] shrink-0 font-medium ${uCount > 0 ? 'text-[var(--bg-primary)] font-bold' : 'text-[var(--chat-list-subtext,#666666)] opacity-70'}`}>
+            <span className={`text-[10px] shrink-0 font-medium ${uCount > 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-[var(--chat-list-subtext,#666666)] opacity-70'}`}>
               {last?.timestamp || ''}
             </span>
           </div>
@@ -92,8 +92,12 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
               <span className="text-[12px] text-[var(--chat-list-subtext,#666666)] truncate font-medium">{getPText()}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              {uCount > 0 && !isActive && <span className="bg-[var(--bg-primary)] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">{uCount}</span>}
-              {isPinned && !isActive && <div className="w-1.5 h-1.5 bg-[var(--bg-primary)] rounded-full" />}
+              {uCount > 0 && !isActive && (
+                <span className="bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white text-[10px] font-extrabold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center shadow-md">
+                  {uCount}
+                </span>
+              )}
+              {isPinned && !isActive && <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />}
               <ChevronRight size={14} className="text-[var(--chat-list-subtext,#666666)] opacity-40 md:hidden" />
             </div>
           </div>
