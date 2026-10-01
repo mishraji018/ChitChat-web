@@ -63,6 +63,20 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             );
             const lastMsg = sortedMsgs.length > 0 ? sortedMsgs[0] : null;
 
+            const allMappedMsgs = (conv.messages || [])
+              .sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+              .map((m: any) => ({
+                id: m.id,
+                senderId: m.sender_id,
+                receiverId: m.receiver_id || otherParticipant.id,
+                content: m.text,
+                text: m.text,
+                type: m.type || 'text',
+                timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                createdAt: m.created_at,
+                status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus
+              }));
+
             return {
               id: conv.id,
               user: {
@@ -74,7 +88,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 isOnline: false, // Will be updated by presence
                 lastSeen: otherParticipant.last_seen
               },
-              messages: [],
+              messages: allMappedMsgs,
               lastMessage: lastMsg ? {
                 id: lastMsg.id,
                 senderId: lastMsg.sender_id,

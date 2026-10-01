@@ -103,7 +103,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
   const topObserverRef = useRef<HTMLDivElement>(null);
 
   // ─── [46-75] Hooks ────────────────────────
-  const { messages, sendMessage, markAsRead, loading: mLoading, setMessages } = useMessages(chat?.id || null);
+  const { messages, sendMessage, markAsRead, loading: mLoading, setMessages } = useMessages(chat?.id || null, chat?.messages || []);
   const { onlineUsers } = usePresence(currentUser.id);
   const { isTyping: isRecTyping, handleTyping } = useTyping(chat?.id || null, currentUser.id);
   const { streak, updateStreak, justBroken } = useStreak(currentUser.id, chat?.user.id || '');
@@ -368,7 +368,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             ref={containerRef} 
             onScroll={onScroll} 
             className="flex-1 overflow-y-auto overflow-x-hidden p-4 flex flex-col gap-1 chat-pattern scrollbar-thin z-10"
-            style={{ background: currentWallpaper.bg }}
+            style={{ background: currentWallpaper.id === 'default' ? 'transparent' : currentWallpaper.bg }}
           >
             {!isOnline ? (
               <div className="bg-red-500/20 border border-red-500/30 text-red-400 text-xs text-center py-2 px-4 rounded-lg mx-4 my-2">

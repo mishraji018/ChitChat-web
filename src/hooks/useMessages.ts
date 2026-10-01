@@ -9,9 +9,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/config/supabase';
 import { Message, MessageStatus } from '@/types';
 
-export const useMessages = (chatId: string | null) => {
+export const useMessages = (chatId: string | null, initialMessages: Message[] = []) => {
   // ─── [1-10] State & Refs ──────────────────
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<any>(null);
 
@@ -71,17 +71,25 @@ export const useMessages = (chatId: string | null) => {
       return;
     }
 
+    // 0. Use pre-loaded messages from conversation if provided
+    if (initialMessages && initialMessages.length > 0) {
+      setMessages(initialMessages);
+    }
+
     // 1. Load from cache first for instant display
     const cached = localStorage.getItem(`messages_${chatId}`);
     if (cached) {
       try {
-        setMessages(JSON.parse(cached));
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
       } catch (e) {
         console.error('[useMessages] Cache parse error:', e);
       }
     }
 
-    // 2. Then fetch fresh from server
+    // 2. Always fetch fresh messages from Supabase
     fetchMessages();
   }, [chatId, fetchMessages]);
 
