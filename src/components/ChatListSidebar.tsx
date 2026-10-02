@@ -4,6 +4,7 @@ import { Chat, User as UserType } from '@/types/chat';
 import { motion, AnimatePresence } from 'framer-motion';
 import { translations } from '@/i18n/translations';
 import ChatListItem from './ChatListItem';
+import UserAvatar from './Avatar';
 import { supabase } from '@/config/supabase';
 
 interface ChatListSidebarProps {
@@ -115,47 +116,78 @@ const ChatListSidebar = ({
     if (!showNewChatUI) {
       setUserSearchQuery('');
       setFoundUsers([]);
+      setIsSearchingUsers(false);
       return;
     }
+
+    let isMounted = true;
 
     const fetchUsers = async () => {
       setIsSearchingUsers(true);
       try {
-        let queryBuilder = supabase.from('users').select('*').neq('id', currentUser.id);
-        
-        if (userSearchQuery) {
-          queryBuilder = queryBuilder.or(`username.ilike.%${userSearchQuery}%,email.ilike.%${userSearchQuery}%,display_name.ilike.%${userSearchQuery}%`);
+        let queryBuilder = supabase
+          .from('users')
+          .select('id, username, display_name, email, avatar_url, avatar_color, is_online, last_seen, bio');
+
+        if (currentUser?.id) {
+          queryBuilder = queryBuilder.neq('id', currentUser.id);
         }
 
-        const { data, error } = await queryBuilder.limit(10);
+        const trimmed = userSearchQuery.trim();
+        if (trimmed) {
+          queryBuilder = queryBuilder.or(`username.ilike.%${trimmed}%,email.ilike.%${trimmed}%,display_name.ilike.%${trimmed}%`);
+        }
+
+        const queryPromise = queryBuilder.order('display_name', { ascending: true }).limit(30);
+        const timeoutPromise = new Promise<{ data: any; error: any }>((_, reject) =>
+          setTimeout(() => reject(new Error('Query timeout')), 6000)
+        );
+
+        const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
         
         if (error) throw error;
 
-        if (data) {
-          setFoundUsers(data.map((u: any) => ({
+        if (isMounted && data) {
+          const mapped = data.map((u: any) => ({
             id: u.id,
-            username: u.username,
-            displayName: u.display_name || u.username || u.email.split('@')[0],
+            username: u.username || 'user',
+            displayName: u.display_name || u.username || (u.email ? u.email.split('@')[0] : 'User'),
             avatar: u.avatar_url,
-            avatarColor: '#8b5cf6',
-            isOnline: u.is_online,
+            avatarColor: u.avatar_color || '#8b5cf6',
+            isOnline: Boolean(u.is_online),
             lastSeen: u.last_seen,
             status: u.bio || 'Available'
-          })));
+          }));
+          setFoundUsers(mapped);
         }
       } catch (err) {
         console.error('Error fetching users from Supabase:', err);
+        if (isMounted) {
+          // Fallback to known chat users if database query fails
+          const knownUsers = chats
+            .map(c => c.user)
+            .filter(u => u && u.id && u.id !== currentUser?.id);
+          const uniqueUsers = Array.from(new Map(knownUsers.map(u => [u.id, u])).values());
+          if (uniqueUsers.length > 0) {
+            setFoundUsers(uniqueUsers);
+          }
+        }
       } finally {
-        setIsSearchingUsers(false);
+        if (isMounted) {
+          setIsSearchingUsers(false);
+        }
       }
     };
 
     const timer = setTimeout(() => {
       fetchUsers();
-    }, userSearchQuery ? 300 : 0);
+    }, userSearchQuery ? 250 : 0);
 
-    return () => clearTimeout(timer);
-  }, [userSearchQuery, showNewChatUI, currentUser.id]);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [userSearchQuery, showNewChatUI, currentUser?.id]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -229,7 +261,7 @@ const ChatListSidebar = ({
             )}
             {!showArchived ? (
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 bg-[var(--bg-primary)] rounded-xl flex items-center justify-center text-white shadow-md">
+                <div className="w-9 h-9 bg-gradient-to-tr from-[#7c3aed] to-[#6366f1] rounded-xl flex items-center justify-center text-white shadow-md shadow-purple-500/25 shrink-0">
                   <Zap size={18} fill="currentColor" />
                 </div>
                 <h1 className="text-2xl font-black text-[var(--chat-list-text,#111111)] tracking-tight">Blink</h1>
@@ -239,7 +271,20 @@ const ChatListSidebar = ({
             )}
           </div>
           
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            {/* User Profile Avatar Quick Button */}
+            <button 
+              onClick={onOpenProfile}
+              className="p-0.5 rounded-full hover:ring-2 hover:ring-purple-500/50 transition-all cursor-pointer shrink-0"
+              title={`My Profile (${currentUser.displayName || currentUser.username})`}
+            >
+              <UserAvatar 
+                name={currentUser.displayName || currentUser.username} 
+                avatar={currentUser.avatar} 
+                color={currentUser.avatarColor} 
+                size="sm" 
+              />
+            </button>
 
             {/* Notifications Button */}
             <div className="relative" ref={notificationsRef}>
@@ -437,92 +482,137 @@ const ChatListSidebar = ({
         </button>
       )}
 
-      {/* New Chat Panel Overlay inside Sidebar */}
+      {/* New Chat Modal - Centered Glassy Modal */}
       <AnimatePresence>
         {showNewChatUI && (
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute inset-0 z-[60] bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] flex flex-col h-full"
-          >
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-black/10 dark:border-white/10 flex items-center gap-4">
-              <button 
-                onClick={() => setShowNewChatUI(false)}
-                className="p-2 -ml-2 text-[var(--chat-list-subtext,#666666)] hover:text-[var(--chat-list-text,#111111)] rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-              >
-                <ArrowLeft size={20} />
-              </button>
-              <h2 className="font-bold text-lg text-[var(--chat-list-text,#111111)] flex-1">
-                New Chat
-              </h2>
-            </div>
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 md:p-8 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
+            {/* Backdrop */}
+            <div className="absolute inset-0" onClick={() => setShowNewChatUI(false)} />
 
-            {/* Search Bar */}
-            <div className="px-6 py-4">
-              <div className="relative group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--chat-list-subtext,#666666)] group-focus-within:text-purple-500 transition-colors" size={18} />
-                <input
-                  autoFocus
-                  type="text"
-                  placeholder="Search users on Blink"
-                  className="w-full bg-black/5 dark:bg-white/10 border border-transparent focus:border-purple-500/30 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none transition-all placeholder:text-[var(--chat-list-subtext,#666666)] text-[var(--chat-list-text,#111111)]"
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 15 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+              className="relative z-10 w-full max-w-lg h-[620px] max-h-[90vh] rounded-[2.2rem] bg-white/95 dark:bg-[#101015]/95 text-foreground backdrop-blur-3xl border border-black/10 dark:border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.6)] flex flex-col overflow-hidden"
+            >
+              {/* Top Accent Line */}
+              <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent pointer-events-none" />
 
-            {/* User List */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin px-4">
-              {isSearchingUsers ? (
-                <div className="flex justify-center py-10">
-                  <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                </div>
-              ) : foundUsers.length > 0 ? (
-                <div className="space-y-1 pb-4">
-                  {foundUsers.map((user, i) => (
-                    <motion.div
-                      key={user.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      onClick={() => {
-                        onStartChat?.(user);
-                        setShowNewChatUI(false);
-                      }}
-                      className="flex items-center gap-3 p-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-2xl cursor-pointer transition-all group"
-                    >
-                      <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold text-lg border border-purple-500/10">
-                        {user.displayName[0]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm text-[var(--chat-list-text,#111111)] truncate">{user.displayName}</p>
-                        <p className="text-xs text-[var(--chat-list-subtext,#666666)] truncate">@{user.username}</p>
-                      </div>
-                      <button className="px-4 py-1.5 bg-purple-600/10 text-purple-500 text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-all">
-                        Message
-                      </button>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-                  <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-4 text-[var(--chat-list-subtext,#666666)]">
-                    <Search size={32} />
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-black/10 dark:border-white/10 flex items-center justify-between gap-4 shrink-0 bg-black/[0.02] dark:bg-white/[0.02]">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/25 shrink-0">
+                    <Zap size={20} />
                   </div>
-                  <p className="font-bold text-[var(--chat-list-text,#111111)]">No users found</p>
-                  <p className="text-xs text-[var(--chat-list-subtext,#666666)] mt-1">Try searching for someone else</p>
+                  <div>
+                    <h2 className="text-xl font-black tracking-tight text-foreground">
+                      New Chat
+                    </h2>
+                    <p className="text-xs text-muted-foreground">Find and message people on Blink</p>
+                  </div>
                 </div>
-              )}
-            </div>
-            
-            <p className="text-center text-[10px] text-[var(--text-secondary)] py-6 px-10 font-medium">
-              Search users on Blink
-            </p>
-          </motion.div>
+
+                <button 
+                  onClick={() => setShowNewChatUI(false)}
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search Bar */}
+              <div className="px-6 pt-4 pb-2">
+                <div className="relative group">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-purple-500 transition-colors" size={17} />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Search by name, @username, or email..."
+                    className="w-full bg-black/5 dark:bg-white/10 border border-black/5 dark:border-white/10 focus:border-purple-500/50 rounded-2xl py-3 pl-11 pr-4 text-sm focus:outline-none transition-all placeholder:text-muted-foreground text-foreground"
+                    value={userSearchQuery}
+                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                  />
+                  {userSearchQuery && (
+                    <button 
+                      onClick={() => setUserSearchQuery('')}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* User List */}
+              <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-2 space-y-1">
+                {isSearchingUsers ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3">
+                    <div className="w-8 h-8 border-3 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                    <p className="text-xs text-muted-foreground">Searching users...</p>
+                  </div>
+                ) : foundUsers.length > 0 ? (
+                  <div className="space-y-1 pb-4">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground px-3 py-1">
+                      {userSearchQuery ? `Search Results (${foundUsers.length})` : `Suggested Users (${foundUsers.length})`}
+                    </p>
+                    {foundUsers.map((user, i) => (
+                      <motion.div
+                        key={user.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                        onClick={() => {
+                          onStartChat?.(user);
+                          setShowNewChatUI(false);
+                        }}
+                        className="flex items-center gap-3.5 p-3 hover:bg-black/5 dark:hover:bg-white/5 rounded-2xl cursor-pointer transition-all group border border-transparent hover:border-black/5 dark:hover:border-white/10"
+                      >
+                        <UserAvatar 
+                          name={user.displayName || user.username} 
+                          avatar={user.avatar} 
+                          color={user.avatarColor} 
+                          size="md" 
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-sm text-foreground truncate">{user.displayName}</p>
+                            {user.isOnline && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Online" />
+                            )}
+                          </div>
+                          <p className="text-xs text-purple-600 dark:text-purple-400 truncate">@{user.username}</p>
+                          {user.status && (
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">{user.status}</p>
+                          )}
+                        </div>
+                        <button className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl opacity-90 group-hover:opacity-100 transition-all shadow-sm shrink-0">
+                          Chat
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+                    <div className="w-16 h-16 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-4 text-muted-foreground">
+                      <Search size={32} />
+                    </div>
+                    <p className="font-bold text-foreground">No users found</p>
+                    <p className="text-xs text-muted-foreground mt-1">Try typing another username or name</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Note */}
+              <div className="px-6 py-3 border-t border-black/10 dark:border-white/10 text-center bg-black/[0.01] dark:bg-white/[0.01]">
+                <p className="text-[11px] text-muted-foreground">
+                  Click any user to begin chatting instantly
+                </p>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

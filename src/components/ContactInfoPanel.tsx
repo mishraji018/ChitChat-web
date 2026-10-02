@@ -1,8 +1,8 @@
-import { X, MessageSquare, Phone, Video, Search, FileText, Download, Edit2, Check } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, MessageSquare, Phone, Video, Search, FileText, Download, Edit2, Check, User as UserIcon, Image as ImageIcon, Sparkles } from 'lucide-react';
 import UserAvatar from './Avatar';
-import { User, Message, Chat } from '@/types/chat';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useMemo, useEffect } from 'react';
+import { User, Message, Chat, ThemeType } from '@/types/chat';
+import { motion } from 'framer-motion';
 import { useLocalStorage } from '@/hooks/use-local-storage';
 import { toast } from 'sonner';
 import { supabase } from '@/config/supabase';
@@ -11,9 +11,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 
 interface ContactInfoPanelProps {
   user: User;
@@ -24,6 +22,7 @@ interface ContactInfoPanelProps {
   onOpenSearch: () => void;
   onMessageClick: () => void;
   onDeleteConversation: (chatId: string) => void;
+  currentTheme?: ThemeType;
 }
 
 const ContactInfoPanel = ({ 
@@ -34,12 +33,28 @@ const ContactInfoPanel = ({
   onOpenWallpaper, 
   onOpenSearch, 
   onMessageClick,
-  onDeleteConversation 
+  onDeleteConversation,
+  currentTheme = 'dark'
 }: ContactInfoPanelProps) => {
+  const isLight = currentTheme === 'light';
   const [showAllMedia, setShowAllMedia] = useState(false);
   const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [nickname, setNickname] = useLocalStorage(`nickname_${user.id}`, user.displayName);
   const [tempNickname, setTempNickname] = useState(nickname);
+
+  const [mediaList, setMediaList] = useState<any[]>([]);
+  const [docsList, setDocsList] = useState<any[]>([]);
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false);
+  const [contactUser, setContactUser] = useState<User>(user);
+
+  // Keyboard shortcut: Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const handleSaveNickname = () => {
     setNickname(tempNickname);
@@ -53,77 +68,53 @@ const ContactInfoPanel = ({
       return new Date(dateStr).toLocaleDateString('en-IN', {
         day: 'numeric', month: 'long', year: 'numeric'
       });
-    } catch (e) { return dateStr; }
+    } catch { return dateStr; }
   };
 
-  // Real-time user updates (About/Bio/Online status)
-  const [contactUser, setContactUser] = useState<User>(user);
-
+  // Real-time user updates
   useEffect(() => {
-    setContactUser(user);
-  }, [user]);
-
-  useEffect(() => {
-    if (!user.id) return;
-
-    const channel = supabase.channel(`user_updates_${user.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'users',
-        filter: `id=eq.${user.id}`
-      }, (payload) => {
-        const updated = payload.new;
+    const fetchUserData = async () => {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (data) {
         setContactUser(prev => ({
           ...prev,
-          displayName: updated.display_name || updated.name || prev.displayName,
-          username: updated.username || prev.username,
-          status: updated.status || prev.status,
-          avatar: updated.avatar_url || prev.avatar,
-          lastSeen: updated.last_seen || prev.lastSeen
+          displayName: data.display_name || prev.displayName,
+          username: data.username || prev.username,
+          avatar: data.avatar_url || prev.avatar,
+          avatarColor: data.avatar_color || prev.avatarColor,
+          status: data.bio || prev.status,
+          isOnline: data.is_online,
+          lastSeen: data.last_seen,
         }));
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+      }
     };
+    fetchUserData();
   }, [user.id]);
 
-  // Fetch all media and documents from Supabase
-  const [mediaList, setMediaList] = useState<any[]>([]);
-  const [docsList, setDocsList] = useState<any[]>([]);
-  const [isLoadingMedia, setIsLoadingMedia] = useState(true);
-
+  // Fetch shared media from database
   useEffect(() => {
     const fetchSharedContent = async () => {
-      if (!chat.id) return;
-      
       setIsLoadingMedia(true);
-      setMediaList([]);
-      setDocsList([]);
-
       const { data, error } = await supabase
         .from('messages')
-        .select('media_url, media_type, media_name, media_size, created_at, text, type, sender_id')
+        .select('*')
         .eq('chat_id', chat.id)
         .not('media_url', 'is', null)
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        // Filter for privacy: only show media/docs sent by the contact
-        const contactData = data.filter(m => m.sender_id === user.id);
-
-        const media = contactData.filter(m => {
+        const media = data.filter(m => {
           const mt = (m.media_type || m.type || '').toLowerCase();
-          return mt.startsWith('image') || mt.startsWith('video') || mt.startsWith('audio') 
-            || mt === 'image' || mt === 'video' || mt === 'voice' || mt === 'audio';
+          return mt.includes('image') || mt.includes('video') || mt === 'image' || mt === 'video';
         });
-        const docs = contactData.filter(m => {
+        const docs = data.filter(m => {
           const mt = (m.media_type || m.type || '').toLowerCase();
           return mt === 'document' || mt === 'file' 
             || mt.includes('pdf') || mt.includes('word') || mt.includes('text')
-            || mt.includes('spreadsheet') || mt.includes('excel') || mt.includes('csv')
             || mt.includes('zip') || mt.includes('application');
         });
         setMediaList(media);
@@ -133,221 +124,250 @@ const ContactInfoPanel = ({
     };
 
     fetchSharedContent();
-  }, [chat.id, user.id]);
+  }, [chat.id]);
 
-  // Filter messages for this conversation only
-  const conversationMessages = useMemo(() => 
-    messages.filter(msg => msg.senderId === user.id || msg.receiverId === user.id),
-    [messages, user.id]
-  );
-
-  const sharedMedia = useMemo(() => 
-    conversationMessages.filter(msg => msg.type === 'image')
-      .map(msg => ({ url: msg.content, date: msg.timestamp })),
-    [conversationMessages]
-  );
-
-  const sharedDocs = useMemo(() => 
-    conversationMessages.filter(msg => msg.type === 'document')
-      .map(msg => ({
-        name: msg.fileName || 'Document',
-        size: msg.fileSize || 'Unknown size',
-        date: msg.timestamp,
-        url: msg.content
-      })),
-    [conversationMessages]
-  );
-
-
+  const panelBg = isLight 
+    ? 'bg-white/95 text-slate-900 border-slate-200 shadow-[0_25px_70px_rgba(0,0,0,0.15)]' 
+    : 'bg-[#101015]/95 text-white border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.6)]';
+  
+  const headerBg = isLight ? 'bg-slate-50/70 border-slate-200' : 'bg-white/[0.02] border-white/10';
+  const cardBg = isLight ? 'bg-slate-50/80 border-slate-200/80' : 'bg-white/[0.04] border-white/10';
+  const textMuted = isLight ? 'text-slate-500' : 'text-zinc-400';
+  const textTitle = isLight ? 'text-slate-900' : 'text-white';
+  const closeBtnBg = isLight 
+    ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900' 
+    : 'bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white';
 
   return (
-    <>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 md:p-8 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
+      
+      {/* Backdrop */}
+      <div className="absolute inset-0" onClick={onClose} />
+
+      {/* Glassy Centered Modal */}
       <motion.div 
-        initial={{ x: 340 }}
-        animate={{ x: 0 }}
-        exit={{ x: 340 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="w-[340px] h-full bg-card border-l border-border flex flex-col z-40 shadow-xl overflow-hidden shrink-0"
+        initial={{ opacity: 0, scale: 0.94, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 15 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+        className={`relative z-10 w-full max-w-lg h-[640px] max-h-[90vh] rounded-[2.2rem] backdrop-blur-3xl border flex flex-col overflow-hidden transition-colors ${panelBg}`}
       >
-        <div className="flex items-center justify-between p-4 border-b border-border bg-card">
+        {/* Top Glow Accent */}
+        <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent pointer-events-none" />
+
+        {/* ── Modal Header ── */}
+        <div className={`px-6 py-4 border-b flex items-center justify-between gap-4 shrink-0 transition-colors ${headerBg}`}>
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="p-1 hover:bg-muted rounded-full transition-colors">
-              <X size={20} />
-            </button>
-            <h2 className="font-bold text-lg">Contact Info</h2>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/25 shrink-0">
+              <UserIcon size={20} />
+            </div>
+            <div>
+              <h2 className={`text-xl font-black tracking-tight ${textTitle}`}>Contact Details</h2>
+              <p className={`text-xs ${textMuted}`}>Overview of conversations and media</p>
+            </div>
           </div>
-          <button 
-            onClick={() => { setIsEditingNickname(!isEditingNickname); setTempNickname(nickname); }}
-            className={`p-2 rounded-full transition-colors ${isEditingNickname ? 'bg-primary text-white' : 'hover:bg-muted text-muted-foreground'}`}
-          >
-            <Edit2 size={18} />
-          </button>
+
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => { setIsEditingNickname(!isEditingNickname); setTempNickname(nickname); }}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                isEditingNickname ? 'bg-purple-600 text-white' : closeBtnBg
+              }`}
+              title="Edit Nickname"
+            >
+              <Edit2 size={16} />
+            </button>
+            <button 
+              onClick={onClose}
+              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer ${closeBtnBg}`}
+              title="Close (Esc)"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
-          {/* Profile Section */}
-            <div className="flex flex-col items-center w-full">
-              <div className="relative">
-                <UserAvatar name={contactUser.displayName} color={contactUser.avatarColor} size="2xl" />
-                {contactUser.isOnline && (
-                  <span className="absolute bottom-1 right-1 w-6 h-6 bg-online rounded-full border-4 border-card" />
-                )}
-              </div>
-              
-              <div className="mt-4 w-full flex flex-col items-center">
-                {isEditingNickname ? (
-                  <div className="flex items-center gap-2 w-full px-4">
-                    <div className="flex-1 bg-muted/50 rounded-lg px-3 py-2 border border-primary/30 flex flex-col">
-                      <span className="text-[10px] text-primary font-bold uppercase tracking-tight">Nickname</span>
-                      <input 
-                        autoFocus
-                        type="text"
-                        value={tempNickname}
-                        onChange={(e) => setTempNickname(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveNickname()}
-                        className="bg-transparent border-none outline-none text-base font-bold text-foreground w-full"
-                      />
-                    </div>
-                    <button 
-                      onClick={handleSaveNickname}
-                      className="p-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                    >
-                      <Check size={20} />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <h2 className="text-xl font-bold text-foreground text-center px-4">{nickname}</h2>
-                    {nickname !== contactUser.displayName && (
-                      <p className="text-xs text-muted-foreground mt-0.5">({contactUser.displayName})</p>
-                    )}
-                  </>
-                )}
-              </div>
-              
-              <p className="text-sm text-muted-foreground mt-1">@{contactUser.username}</p>
-              <p className="text-sm text-primary mt-1 font-medium">{contactUser.isOnline ? 'Online' : formatDate(contactUser.lastSeen) || 'Last seen recently'}</p>
+        {/* ── Modal Body ── */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
+          
+          {/* Contact Header Showcase */}
+          <div className="flex flex-col items-center w-full text-center">
+            <div className="relative">
+              <UserAvatar name={contactUser.displayName} color={contactUser.avatarColor} avatar={contactUser.avatar} size="2xl" />
+              {contactUser.isOnline && (
+                <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white dark:border-[#101015] shadow-sm flex items-center justify-center">
+                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                </span>
+              )}
             </div>
+            
+            <div className="mt-3.5 w-full flex flex-col items-center">
+              {isEditingNickname ? (
+                <div className="flex items-center gap-2 w-full max-w-xs px-2 animate-in fade-in">
+                  <input 
+                    autoFocus
+                    type="text"
+                    value={tempNickname}
+                    onChange={(e) => setTempNickname(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveNickname()}
+                    placeholder="Enter nickname..."
+                    className={`flex-1 rounded-xl px-3 py-1.5 text-sm font-bold border focus:border-purple-500 outline-none ${
+                      isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-white/10 border-white/20 text-white'
+                    }`}
+                  />
+                  <button 
+                    onClick={handleSaveNickname}
+                    className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors cursor-pointer"
+                  >
+                    <Check size={16} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h3 className={`text-xl font-black tracking-tight ${textTitle}`}>{nickname}</h3>
+                  {nickname !== contactUser.displayName && (
+                    <p className={`text-xs ${textMuted}`}>({contactUser.displayName})</p>
+                  )}
+                </>
+              )}
+            </div>
+            
+            <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 mt-1">@{contactUser.username}</p>
+            <p className="text-xs font-medium text-emerald-500 mt-0.5">
+              {contactUser.isOnline ? 'Online now' : formatDate(contactUser.lastSeen) ? `Last seen ${formatDate(contactUser.lastSeen)}` : 'Offline'}
+            </p>
+          </div>
 
-          {/* Action Buttons Row */}
-          <div className="flex justify-around px-2 py-4 border-b border-border">
+          {/* Quick Actions Bar */}
+          <div className="grid grid-cols-4 gap-2">
             {[
-              { icon: <MessageSquare size={20} />, label: 'Message', onClick: onMessageClick },
-              { icon: <Phone size={20} />,         label: 'Call',    disabled: true },
-              { icon: <Video size={20} />,         label: 'Video',   disabled: true },
-              { icon: <Search size={20} />,        label: 'Search',  onClick: onOpenSearch },
+              { icon: <MessageSquare size={18} />, label: 'Message', onClick: () => { onMessageClick(); onClose(); } },
+              { icon: <Phone size={18} />,         label: 'Call',    disabled: true },
+              { icon: <Video size={18} />,         label: 'Video',   disabled: true },
+              { icon: <Search size={18} />,        label: 'Search',  onClick: () => { onOpenSearch(); onClose(); } },
             ].map(btn => (
               <button 
                 key={btn.label} 
                 onClick={btn.onClick}
                 disabled={btn.disabled}
-                className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all group ${btn.disabled ? 'opacity-30 cursor-not-allowed' : 'hover:bg-primary/10 cursor-pointer'}`}
+                className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border transition-all ${cardBg} ${
+                  btn.disabled ? 'opacity-40 cursor-not-allowed' : 'hover:scale-[1.03] cursor-pointer hover:border-purple-500/40'
+                }`}
               >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${btn.disabled ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white'}`}>
+                <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                   {btn.icon}
                 </div>
-                <span className="text-[11px] text-muted-foreground">{btn.label}</span>
+                <span className={`text-[11px] font-semibold ${textMuted}`}>{btn.label}</span>
               </button>
             ))}
           </div>
 
-          {/* Bio / About */}
-          <div className="px-4 py-6 border-b border-border">
-            <p className="text-xs text-primary font-bold uppercase tracking-widest mb-2 font-display">About</p>
-            <p className="text-sm text-foreground leading-relaxed">{contactUser.status || 'Hey there! I am using BlinkChat'}</p>
+          {/* About / Bio Status */}
+          <div className={`p-4 rounded-2xl border space-y-1.5 ${cardBg}`}>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>About & Bio</p>
+            <p className={`text-sm leading-relaxed ${textTitle}`}>
+              {contactUser.status || 'Hey there! I am using Blink'}
+            </p>
           </div>
 
           {/* Shared Media Section */}
-          <div className="px-4 py-6 border-b border-border">
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-xs text-primary font-bold uppercase tracking-widest font-display">Media, Links & Docs</p>
+          <div className={`p-4 rounded-2xl border space-y-3 ${cardBg}`}>
+            <div className="flex justify-between items-center">
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Shared Media & Files</p>
               {mediaList.length > 0 && (
-                <button onClick={() => setShowAllMedia(true)} className="text-xs text-primary hover:underline font-semibold">See All</button>
+                <button 
+                  onClick={() => setShowAllMedia(true)} 
+                  className="text-xs text-purple-600 dark:text-purple-400 hover:underline font-bold cursor-pointer"
+                >
+                  See All ({mediaList.length})
+                </button>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {mediaList.slice(0, 6).map((media, i) => {
+
+            <div className="grid grid-cols-4 gap-2">
+              {mediaList.slice(0, 4).map((media, i) => {
                 const isVideo = (media.media_type || media.type || '').toLowerCase().startsWith('video');
                 return (
-                  <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 transition-opacity relative">
+                  <div key={i} className="aspect-square rounded-xl overflow-hidden bg-black/10 dark:bg-white/5 cursor-pointer hover:opacity-85 transition-opacity relative group">
                     {isVideo ? (
                       <>
                         <video src={media.media_url} className="w-full h-full object-cover" muted />
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                          <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
-                            <span className="text-black text-xs ml-0.5">▶</span>
-                          </div>
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <span className="text-white text-xs">▶</span>
                         </div>
                       </>
                     ) : (
-                      <img src={media.media_url} alt={`Shared ${i}`} className="w-full h-full object-cover" />
+                      <img src={media.media_url} alt={`Shared ${i}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     )}
                   </div>
                 );
               })}
               {isLoadingMedia ? (
-                <div className="col-span-3 flex justify-center py-6">
-                  <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+                <div className="col-span-4 flex justify-center py-4">
+                  <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
                 </div>
               ) : mediaList.length === 0 ? (
-                <p className="col-span-3 text-sm text-muted-foreground text-center py-4 italic">No media shared yet</p>
+                <p className={`col-span-4 text-xs ${textMuted} text-center py-3 italic`}>No photos or videos shared yet</p>
               ) : null}
             </div>
           </div>
 
           {/* Shared Documents */}
-          <div className="px-4 py-6 border-b border-border">
-            <p className="text-xs text-primary font-bold uppercase tracking-widest mb-4 font-display">Shared Documents</p>
-            <div className="space-y-3">
-              {docsList.map((doc, i) => (
-                <div key={i} className="flex items-center gap-3 py-1 group cursor-pointer">
-                  <div className="w-10 h-10 rounded-xl bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-                    <FileText size={18} className="text-muted-foreground group-hover:text-primary transition-colors" />
+          {docsList.length > 0 && (
+            <div className={`p-4 rounded-2xl border space-y-2.5 ${cardBg}`}>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Documents</p>
+              <div className="space-y-2">
+                {docsList.slice(0, 3).map((doc, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                      <FileText size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold truncate ${textTitle}`}>{doc.media_name || 'Document'}</p>
+                      <p className={`text-[10px] ${textMuted}`}>
+                        {doc.media_size ? `${(doc.media_size / 1024).toFixed(1)} KB` : 'Document'}
+                      </p>
+                    </div>
+                    <a 
+                      href={doc.media_url} 
+                      download 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className={`p-1.5 rounded-lg ${closeBtnBg}`}
+                    >
+                      <Download size={14} />
+                    </a>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate text-foreground">{doc.media_name || 'Document'}</p>
-                    <p className="text-[11px] text-muted-foreground">{doc.media_size ? `${(doc.media_size / 1024).toFixed(1)} KB` : 'Unknown size'} • {formatDate(doc.created_at)}</p>
-                  </div>
-                  <a href={doc.media_url} download target="_blank" rel="noreferrer" className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all">
-                    <Download size={16} />
-                  </a>
-                </div>
-              ))}
-              {isLoadingMedia ? (
-                <div className="flex justify-center py-4">
-                  <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-                </div>
-              ) : docsList.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-2 italic">No documents shared</p>
-              ) : null}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
+
       </motion.div>
 
-
+      {/* Expanded Shared Media Modal */}
       <Dialog open={showAllMedia} onOpenChange={setShowAllMedia}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl rounded-3xl backdrop-blur-2xl">
           <DialogHeader>
-            <DialogTitle>Shared Media</DialogTitle>
+            <DialogTitle>All Shared Media</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto p-1 scrollbar-thin">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-[60vh] overflow-y-auto p-1 scrollbar-thin">
             {mediaList.map((media, i) => (
-              <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted cursor-pointer hover:opacity-80 group transition-all">
+              <div key={i} className="aspect-square rounded-xl overflow-hidden bg-black/10 dark:bg-white/5 cursor-pointer hover:opacity-85 transition-opacity">
                 <img 
                   src={media.media_url} 
                   alt={`Shared ${i}`}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  className="w-full h-full object-cover hover:scale-105 transition-transform"
                 />
               </div>
             ))}
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 };
 
 export default ContactInfoPanel;
-

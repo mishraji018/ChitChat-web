@@ -1,8 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 declare global {
   // eslint-disable-next-line no-var
-  var __supabase: ReturnType<typeof createClient> | undefined;
+  var __supabase: SupabaseClient<any, any, any> | undefined;
 }
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -12,7 +12,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('ERROR: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing in your .env file');
 }
 
-export const supabase =
+export const supabase: SupabaseClient<any, any, any> =
   globalThis.__supabase ??
   createClient(supabaseUrl, supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true },

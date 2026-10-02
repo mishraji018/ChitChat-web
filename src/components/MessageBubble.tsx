@@ -99,19 +99,19 @@ const MessageBubble = ({
         `}
       >
         {/* Left accent bar */}
-        <div className={`w-[3px] shrink-0 rounded-l-xl ${isSent ? 'bg-white/70' : 'bg-emerald-500'}`} />
+        <div className={`w-[3px] shrink-0 rounded-l-xl ${isSent ? 'bg-white/70' : 'bg-primary'}`} />
         {/* Content */}
         <div className="flex-1 min-w-0 px-2.5 py-1.5">
-          <p className={`text-[11px] font-bold leading-tight mb-0.5 ${
-            isSent ? 'text-white/90' : 'text-emerald-600 dark:text-emerald-400'
+          <span className={`font-semibold text-[11px] block leading-tight mb-0.5 ${
+            isSent ? 'text-white/90' : 'text-primary dark:text-primary-foreground'
           }`}>
             {senderName || 'Reply'}
-          </p>
-          <p className={`text-[11px] leading-tight truncate ${
-            isSent ? 'text-white/65' : 'text-[var(--text-secondary)]'
+          </span>
+          <span className={`text-[11px] leading-tight truncate block ${
+            isSent ? 'text-white/70' : 'text-[var(--text-secondary)]'
           }`}>
             {text || 'Attachment'}
-          </p>
+          </span>
         </div>
       </button>
     );

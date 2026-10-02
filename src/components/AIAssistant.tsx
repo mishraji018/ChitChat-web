@@ -99,26 +99,23 @@ ${JSON.stringify(chatData, null, 2)}`;
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 md:p-8 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
           {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-md z-[60]"
-          />
+          <div className="absolute inset-0" onClick={onClose} />
 
-          {/* Bottom Drawer */}
+          {/* Centered Glassy Modal */}
           <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed inset-x-0 bottom-0 h-[85vh] bg-[#1a1a1a] border-t border-white/10 z-[70] flex flex-col shadow-2xl rounded-t-[32px] overflow-hidden"
+            initial={{ opacity: 0, scale: 0.94, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 15 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+            className="relative z-10 w-full max-w-2xl h-[620px] max-h-[90vh] bg-[#121218]/95 border border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.6)] flex flex-col rounded-[2.2rem] overflow-hidden backdrop-blur-3xl"
           >
+            {/* Top Glow */}
+            <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent pointer-events-none" />
+
             {/* Header */}
-            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-purple-900/20 to-transparent">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-purple-900/20 to-transparent">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/20">
                   <Sparkles className="text-purple-400" size={20} />
@@ -289,7 +286,7 @@ ${JSON.stringify(chatData, null, 2)}`;
               </div>
             )}
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );

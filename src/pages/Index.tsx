@@ -20,6 +20,7 @@ import { supabase } from '@/config/supabase';
 import { subscribeOnce, unsubscribe } from '@/lib/realtimeManager';
 import { MessageSquare } from "lucide-react";
 import { toast } from '@/components/ui/use-toast';
+import { sortMessagesByTime } from '@/hooks/useMessages';
 
 interface IndexProps {
   currentUser: User;
@@ -315,16 +316,21 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
   useEffect(() => {
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark', 'theme-deep-blue', 'theme-rose', 'theme-teal');
+    root.classList.remove('light', 'dark', 'theme-light', 'theme-dark', 'theme-deep-blue', 'theme-rose', 'theme-teal');
     
     // Set data-theme for the new variable system
     root.setAttribute('data-theme', currentTheme);
 
-    if (currentTheme === 'dark') root.classList.add('dark');
-    else if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
-    else if (currentTheme === 'rose') root.classList.add('theme-rose');
-    else if (currentTheme === 'teal') root.classList.add('theme-teal');
-    else root.classList.add('theme-light');
+    if (currentTheme === 'light') {
+      root.classList.add('light', 'theme-light');
+    } else {
+      // dark, deep-blue, rose, teal are all dark-based themes
+      root.classList.add('dark');
+      if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
+      else if (currentTheme === 'rose') root.classList.add('theme-rose');
+      else if (currentTheme === 'teal') root.classList.add('theme-teal');
+      else root.classList.add('theme-dark');
+    }
     
     localStorage.setItem('blinkchat_theme', currentTheme);
   }, [currentTheme]);
@@ -646,7 +652,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                     setChats((prev: any) => prev.map((c: any) => {
                       if (c.id === chatId) {
                         const exists = c.messages.some((m: any) => m.id === msg.id);
-                        const updatedMessages = exists ? c.messages : [...c.messages, msg];
+                        const updatedMessages = exists ? c.messages : sortMessagesByTime([...c.messages, msg]);
                         return {
                           ...c,
                           messages: updatedMessages,
@@ -779,7 +785,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                       setChats((prev: any) => prev.map((c: any) => {
                         if (c.id === chatId) {
                           const exists = c.messages.some((m: any) => m.id === msg.id);
-                          const updatedMessages = exists ? c.messages : [...c.messages, msg];
+                          const updatedMessages = exists ? c.messages : sortMessagesByTime([...c.messages, msg]);
                           return {
                             ...c,
                             messages: updatedMessages,
@@ -824,28 +830,13 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       </div>
 
       <AnimatePresence>
-        {(showProfile || showSettings || showContactInfo) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => {
-              setShowProfile(false);
-              setShowSettings(false);
-              setShowContactInfo(false);
-            }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-30"
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
         {showProfile && (
           <ProfilePanel 
             isOpen={showProfile} 
             onClose={() => setShowProfile(false)} 
             user={currentUser}
             onSignOut={onLogout}
+            currentTheme={currentTheme}
           />
         )}
         {showSettings && (
@@ -857,12 +848,13 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             language={language}
             onLanguageChange={onLanguageChange}
             currentUser={currentUser}
+            onLogout={onLogout}
           />
         )}
         {showCamera && (
           <CameraModal 
             isOpen={showCamera} 
-            onClose={() => setShowCamera(false)}
+            onClose={() => setShowCamera(false)} 
             onSend={(data) => {
               console.log("Send camera photo", data);
               setShowCamera(false);
@@ -872,7 +864,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
         {showNewGroup && (
           <NewGroupModal 
             isOpen={showNewGroup} 
-            onClose={() => setShowNewGroup(false)}
+            onClose={() => setShowNewGroup(false)} 
             onCreate={(data) => {
               const newChat = {
                 id: `group_${Date.now()}`,
@@ -906,6 +898,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             onOpenSearch={() => setShowChatSearch(true)}
             onMessageClick={() => setShowContactInfo(false)}
             onDeleteConversation={handleDeleteConversation}
+            currentTheme={currentTheme}
           />
         )}
         {showAI && (

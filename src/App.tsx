@@ -45,16 +45,28 @@ const App = () => {
           setShowUsernameScreen(true);
         } else {
           // Existing User
-          await supabase
-            .from('users')
-            .update({ is_online: true })
-            .eq('id', dbUser.id);
+          // Extract Google OAuth profile picture if present
+          const googlePhoto = user.user_metadata?.avatar_url || user.user_metadata?.picture;
+          const finalAvatar = googlePhoto || dbUser.avatar_url;
+
+          // If dbUser doesn't have an avatar or Google provided a photo, sync it to database
+          if (googlePhoto && dbUser.avatar_url !== googlePhoto) {
+            await supabase
+              .from('users')
+              .update({ is_online: true, avatar_url: googlePhoto })
+              .eq('id', dbUser.id);
+          } else {
+            await supabase
+              .from('users')
+              .update({ is_online: true })
+              .eq('id', dbUser.id);
+          }
             
           setCurrentUser({
             id: dbUser.id,
             username: dbUser.username,
             displayName: dbUser.display_name,
-            avatar: dbUser.avatar_url,
+            avatar: finalAvatar,
             avatarColor: dbUser.avatar_color || '#3b82f6',
             status: dbUser.bio || 'Available',
             isOnline: true,
@@ -84,12 +96,15 @@ const App = () => {
         avatarUrl = await uploadAvatarToStorage(avatarFile, tempAuthUser.id);
       }
 
+      const googlePhoto = tempAuthUser?.user_metadata?.avatar_url || tempAuthUser?.user_metadata?.picture;
+      const finalAvatarUrl = avatarUrl || googlePhoto || null;
+
       const newUser = {
         id: tempAuthUser.id,
         email: tempAuthUser.email,
         username,
-        display_name: tempAuthUser.user_metadata.full_name || username,
-        avatar_url: avatarUrl || tempAuthUser.user_metadata.avatar_url,
+        display_name: tempAuthUser.user_metadata?.full_name || username,
+        avatar_url: finalAvatarUrl,
         avatar_color: avatarColor,
         is_online: true,
         last_seen: new Date().toISOString()
@@ -101,13 +116,13 @@ const App = () => {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error || !userData) throw error || new Error('Failed to create user profile');
 
       setCurrentUser({
         id: userData.id,
         username: userData.username,
         displayName: userData.display_name,
-        avatar: userData.avatar_url,
+        avatar: userData.avatar_url || finalAvatarUrl,
         avatarColor: userData.avatar_color || avatarColor,
         status: userData.bio || 'Available',
         isOnline: true,
@@ -169,7 +184,11 @@ const App = () => {
           {showSplash ? (
             <SplashScreen onComplete={() => setShowSplash(false)} />
           ) : showUsernameScreen ? (
-            <UsernameScreen onComplete={handleUsernameComplete} loading={loading} />
+            <UsernameScreen 
+              onComplete={handleUsernameComplete} 
+              loading={loading} 
+              initialAvatar={tempAuthUser?.user_metadata?.avatar_url || tempAuthUser?.user_metadata?.picture}
+            />
           ) : !isLoggedIn ? (
             <LoginScreen onLogin={() => {}} />
           ) : (

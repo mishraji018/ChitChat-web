@@ -1,4 +1,4 @@
-export type MessageType = 'text' | 'image' | 'document' | 'voice' | 'video' | 'audio' | 'file' | 'location' | 'sticker';
+export type MessageType = 'text' | 'image' | 'photo' | 'document' | 'voice' | 'video' | 'audio' | 'file' | 'location' | 'sticker';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen' | 'queued' | 'error';
 export type ThemeType = 'dark' | 'deep-blue' | 'light' | 'rose' | 'teal';
 

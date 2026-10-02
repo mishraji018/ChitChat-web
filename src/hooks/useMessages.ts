@@ -9,9 +9,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/config/supabase';
 import { Message, MessageStatus } from '@/types';
 
+export const sortMessagesByTime = <T extends { createdAt?: string; created_at?: string }>(msgs: T[]): T[] => {
+  return [...msgs].sort((a, b) => {
+    const timeA = new Date(a.createdAt || a.created_at || 0).getTime();
+    const timeB = new Date(b.createdAt || b.created_at || 0).getTime();
+    return timeA - timeB;
+  });
+};
+
 export const useMessages = (chatId: string | null, initialMessages: Message[] = []) => {
   // ─── [1-10] State & Refs ──────────────────
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>(() => sortMessagesByTime(initialMessages));
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<any>(null);
 
@@ -60,13 +68,13 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
             const pendingOptimistic = prev.filter(m => m.status === 'sending');
             const serverIds = new Set(mapped.map(m => m.id));
             const stillPending = pendingOptimistic.filter(m => !serverIds.has(m.id));
-            const merged = [...mapped, ...stillPending];
+            const merged = sortMessagesByTime([...mapped, ...stillPending]);
             localStorage.setItem(`messages_${chatId}`, JSON.stringify(merged));
             return merged;
           }
           // If server returned 0 messages but we already have preloaded/optimistic messages, don't wipe them!
           if (prev.length > 0) {
-            return prev;
+            return sortMessagesByTime(prev);
           }
           return [];
         });
@@ -88,7 +96,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
 
     // 0. Use pre-loaded messages from conversation if provided
     if (initialMessages && initialMessages.length > 0) {
-      setMessages(initialMessages);
+      setMessages(sortMessagesByTime(initialMessages));
     }
 
     // 1. Load from cache first for instant display
@@ -97,7 +105,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
       try {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
+          setMessages(sortMessagesByTime(parsed));
         }
       } catch (e) {
         console.error('[useMessages] Cache parse error:', e);
@@ -140,10 +148,22 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         if (!newMessage.text && !newMessage.media_url) return;
         const mapped = mapMsg(newMessage);
         setMessages(prev => {
-          const exists = prev.some(m => m.id === mapped.id);
-          const next = exists ? prev : [...prev, mapped];
-          localStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
-          return next;
+          // Duplicate prevention: if confirmed/returned message is already in state, skip
+          const alreadyExists = prev.some(m => m.id === mapped.id);
+          if (alreadyExists) return prev;
+
+          // If there is an optimistic message still in 'sending' state matching this message, update it
+          const pendingIndex = prev.findIndex(m => m.status === 'sending' && m.senderId === mapped.senderId && m.content === mapped.content);
+          let next: Message[];
+          if (pendingIndex !== -1) {
+            next = [...prev];
+            next[pendingIndex] = { ...next[pendingIndex], ...mapped, status: (mapped.status || 'sent') as MessageStatus };
+          } else {
+            next = [...prev, mapped];
+          }
+          const sorted = sortMessagesByTime(next);
+          localStorage.setItem(`messages_${chatId}`, JSON.stringify(sorted));
+          return sorted;
         });
       })
       .on('postgres_changes', {
@@ -160,8 +180,9 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
             status: up.status as MessageStatus,
             seen: up.seen
           } : m);
-          localStorage.setItem(`messages_${chatId}`, JSON.stringify(next));
-          return next;
+          const sorted = sortMessagesByTime(next);
+          localStorage.setItem(`messages_${chatId}`, JSON.stringify(sorted));
+          return sorted;
         });
       })
       .subscribe((status) => {
@@ -199,7 +220,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     const clientGeneratedId = mId || crypto.randomUUID();
     const nowIso = new Date().toISOString();
 
-    // 1. Optimistic message for instant UI render
+    // 1. Instant optimistic message for sender UI render
     const optimisticMsg: Message = {
       id: clientGeneratedId,
       senderId: sId,
@@ -217,69 +238,61 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
 
     setMessages(prev => {
       const exists = prev.some(m => m.id === clientGeneratedId);
-      const next = exists ? prev : [...prev, optimisticMsg];
+      const next = exists ? prev : sortMessagesByTime([...prev, optimisticMsg]);
       localStorage.setItem(`messages_${cId}`, JSON.stringify(next));
       return next;
     });
 
-    const fullPayload: any = {
-      id: clientGeneratedId,
-      chat_id: cId,
-      sender_id: sId,
-      text: text.trim(),
-      type,
-      media_data: mData,
-      status: 'sent',
-      seen: false,
-      is_ai: isAI,
-      reply_to: replyTo?.id || null,
-      reply_to_message: replyTo || null,
-      created_at: nowIso
-    };
-
     try {
-      // First try full payload
-      let result = await supabase.from('messages').insert(fullPayload).select().single();
+      // 2. Perform insert and get returned confirmed data
+      const payload: any = {
+        chat_id: cId,
+        sender_id: sId,
+        text: text.trim(),
+        type,
+        status: 'sent',
+        seen: false,
+        created_at: nowIso
+      };
 
-      // If failed due to extra column (reply_to or reply_to_message not in DB), fallback to base schema
+      if (replyTo?.id) {
+        payload.reply_to = replyTo.id;
+      }
+      if (replyTo) {
+        payload.reply_to_message = replyTo;
+      }
+
+      let result = await supabase.from('messages').insert(payload).select().single();
+
+      // Fallback if reply_to or reply_to_message column doesn't exist in DB schema
       if (result.error) {
-        console.warn('[useMessages] Full insert error, trying standard payload:', result.error.message);
+        console.warn('[useMessages] insert with reply error, trying base payload:', result.error.message);
         const basePayload: any = {
-          id: clientGeneratedId,
           chat_id: cId,
           sender_id: sId,
           text: text.trim(),
           type,
-          media_data: mData,
           status: 'sent',
           seen: false,
-          is_ai: isAI,
           created_at: nowIso
         };
         result = await supabase.from('messages').insert(basePayload).select().single();
       }
 
-      // If still error, try minimal schema (id, chat_id, sender_id, text, created_at, seen)
-      if (result.error) {
-        console.warn('[useMessages] Base insert error, trying minimal payload:', result.error.message);
-        const minimalPayload: any = {
-          id: clientGeneratedId,
-          chat_id: cId,
-          sender_id: sId,
-          text: text.trim(),
-          seen: false,
-          created_at: nowIso
-        };
-        result = await supabase.from('messages').insert(minimalPayload).select().single();
-      }
-
       if (result.error) throw result.error;
 
-      // Update optimistic message status to 'sent'
+      // 3. Immediately update local state with confirmed returned data (no waiting for realtime)
+      const confirmedMsg = mapMsg(result.data);
       setMessages(prev => {
-        const next = prev.map(m => m.id === clientGeneratedId ? { ...m, status: 'sent' as MessageStatus } : m);
-        localStorage.setItem(`messages_${cId}`, JSON.stringify(next));
-        return next;
+        const next = prev.map(m => m.id === clientGeneratedId ? {
+          ...optimisticMsg,
+          ...confirmedMsg,
+          id: confirmedMsg.id,
+          status: 'sent' as MessageStatus
+        } : m);
+        const sorted = sortMessagesByTime(next);
+        localStorage.setItem(`messages_${cId}`, JSON.stringify(sorted));
+        return sorted;
       });
 
       return result.data;
@@ -287,7 +300,6 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
       console.error('[useMessages] Send error:', err);
       // Mark optimistic message as failed
       setMessages(prev => prev.map(m => m.id === clientGeneratedId ? { ...m, status: 'error' as MessageStatus } : m));
-      throw err;
     }
   };
 

@@ -33,7 +33,7 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
   const renderIcon = () => {
     if (!last) return null;
     const props = { size: 13, className: "shrink-0" };
-    switch (last.type) {
+    switch (last.type as string) {
       case 'image':
       case 'photo': return <Image {...props} />;
       case 'voice':
@@ -67,7 +67,7 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
     <>
       <div onClick={onClick} onContextMenu={hCtx} className={`flex items-center gap-3 px-4 py-3 cursor-pointer relative transition-all group mx-3 my-1 rounded-2xl ${isActive ? 'bg-black/5 dark:bg-white/10 shadow-sm' : 'hover:bg-black/5 dark:hover:bg-white/5'}`}>
         <div className="relative shrink-0">
-          <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isO} className="w-11 h-11" />
+          <UserAvatar name={chat.user.displayName} color={chat.user.avatarColor} avatar={chat.user.avatar} size="md" isOnline={isO} className="w-11 h-11" />
         </div>
         
         <div className="flex-1 min-w-0">

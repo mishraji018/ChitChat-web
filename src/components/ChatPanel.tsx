@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { translations } from '@/i18n/translations';
 import { v4 as uuidv4 } from 'uuid';
 import { useLocalStorage } from '@/hooks/use-local-storage';
-import { useMessages } from '@/hooks/useMessages';
+import { useMessages, sortMessagesByTime } from '@/hooks/useMessages';
 import { useWallpaper } from '@/hooks/useWallpaper';
 import WallpaperModal from './WallpaperModal';
 import { usePresence } from '@/hooks/usePresence';
@@ -282,18 +282,30 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
         created_at: new Date().toISOString()
       }).select().single();
 
-      if (!insertErr && insertedMsg && onSendMessage) {
-        onSendMessage(chat.id, {
+      if (!insertErr && insertedMsg) {
+        const fileMsg: Message = {
           id: insertedMsg.id,
           senderId: currentUser.id,
           receiverId: chat.user.id,
-          type: messageType,
+          type: messageType as any,
           content: insertedMsg.text,
           mediaUrl: result.url,
           mediaName: result.name,
+          mediaSize: result.size,
+          mediaType: messageType,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: insertedMsg.created_at || new Date().toISOString(),
           status: 'sent'
-        } as Message);
+        };
+        setMessages(prev => {
+          if (prev.some(m => m.id === fileMsg.id)) return prev;
+          const next = sortMessagesByTime([...prev, fileMsg]);
+          localStorage.setItem(`messages_${chat.id}`, JSON.stringify(next));
+          return next;
+        });
+        if (onSendMessage) {
+          onSendMessage(chat.id, fileMsg);
+        }
       }
     } catch (e) { console.error('Upload error:', e); }
   };
@@ -374,7 +386,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <button onClick={onBack} className="p-2 -ml-2 text-[var(--text-secondary)] md:hidden"><ArrowLeft size={20} /></button>
               <div className="relative cursor-pointer flex items-center gap-3" onClick={onOpenInfo}>
-                <UserAvatar name={nickname || chat.user.displayName} color={chat.user.avatarColor} size="md" isOnline={isContactOnline} className="w-10 h-10" />
+                <UserAvatar name={nickname || chat.user.displayName} color={chat.user.avatarColor} avatar={chat.user.avatar} size="md" isOnline={isContactOnline} className="w-10 h-10" />
                 <div className="flex flex-col min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-[15px] text-[var(--text-primary)] truncate">{nickname || chat.user.displayName}</h3>

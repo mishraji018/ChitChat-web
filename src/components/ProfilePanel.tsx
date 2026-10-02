@@ -1,229 +1,277 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/config/supabase';
-import { User as UserType } from '@/types';
-import { Camera, Loader2, Trash2 } from 'lucide-react';
-import { uploadAvatarToStorage, generateRandomAvatarColor } from '@/lib/avatar';
+import { User as UserType, ThemeType } from '@/types/chat';
+import { X, User, Mail, AtSign, Check, LogOut, Sparkles, ShieldCheck, Lock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 
 interface ProfilePanelProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserType;
   onSignOut: () => void;
+  currentTheme?: ThemeType;
 }
 
-const ProfilePanel = ({ isOpen, onClose, user, onSignOut }: ProfilePanelProps) => {
+const ProfilePanel: React.FC<ProfilePanelProps> = ({ 
+  isOpen, 
+  onClose, 
+  user, 
+  onSignOut,
+  currentTheme = 'dark'
+}) => {
+  const isLight = currentTheme === 'light';
   const [bio, setBio] = useState(user?.status || 'Available');
-  const [isEditing, setIsEditing] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem('blinkchat_theme') || 'dark');
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [isSavingBio, setIsSavingBio] = useState(false);
 
-  // Sync theme with document
+  // Keyboard shortcut: Escape to close
   useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('blinkchat_theme', theme);
-  }, [theme]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const handleSaveBio = async () => {
     try {
+      setIsSavingBio(true);
       const { error } = await supabase
         .from('users')
         .update({ bio })
         .eq('id', user.id);
       
       if (error) throw error;
-      setIsEditing(false);
-      user.status = bio; // Update local state
-    } catch (err) {
+      setIsEditingBio(false);
+      user.status = bio;
+      toast.success('About status updated!');
+    } catch (err: any) {
       console.error('Failed to update bio:', err);
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsUploading(true);
-      
-      const avatarUrl = await uploadAvatarToStorage(file, user.id);
-      
-      const { error } = await supabase
-        .from('users')
-        .update({ avatar_url: avatarUrl })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      
-      user.avatar = avatarUrl;
-      toast.success('Profile photo updated!');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update photo');
+      toast.error(err.message || 'Failed to update about');
     } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setIsSavingBio(false);
     }
   };
 
-  const handleRemovePhoto = async () => {
-    try {
-      setIsUploading(true);
-      const newColor = user.avatarColor || generateRandomAvatarColor();
-      const { error } = await supabase
-        .from('users')
-        .update({ avatar_url: null, avatar_color: newColor })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      
-      user.avatar = undefined;
-      user.avatarColor = newColor;
-      toast.success('Profile photo removed');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to remove photo');
-    } finally {
-      setIsUploading(false);
-    }
-  };
 
   if (!isOpen) return null;
 
+  const panelBg = isLight 
+    ? 'bg-white/95 text-slate-900 border-slate-200 shadow-[0_25px_70px_rgba(0,0,0,0.15)]' 
+    : 'bg-[#101015]/95 text-white border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.6)]';
+  
+  const headerBg = isLight ? 'bg-slate-50/70 border-slate-200' : 'bg-white/[0.02] border-white/10';
+  const cardBg = isLight ? 'bg-slate-50/80 border-slate-200/80' : 'bg-white/[0.04] border-white/10';
+  const textMuted = isLight ? 'text-slate-500' : 'text-zinc-400';
+  const textTitle = isLight ? 'text-slate-900' : 'text-white';
+  const closeBtnBg = isLight 
+    ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900' 
+    : 'bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white';
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-start pointer-events-none">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 md:p-8 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
+      
       {/* Backdrop */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto"
-      />
+      <div className="absolute inset-0" onClick={onClose} />
 
-      {/* Panel */}
+      {/* Glassy Centered Profile Modal */}
       <motion.div
-        initial={{ x: '-100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '-100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-        className="relative w-full max-w-[340px] h-full bg-[var(--bg-primary)] border-r border-[var(--border-color)] flex flex-col pointer-events-auto shadow-2xl"
+        initial={{ opacity: 0, scale: 0.94, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: 15 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 320 }}
+        className={`relative z-10 w-full max-w-lg rounded-[2.2rem] backdrop-blur-3xl border flex flex-col overflow-hidden transition-colors ${panelBg}`}
       >
-        {/* Header */}
-        <div className="p-6 flex items-center justify-between border-b border-[var(--border-color)]">
-          <h2 className="text-xl font-bold text-[var(--text-primary)]">Profile</h2>
-          <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors text-2xl font-light">×</button>
-        </div>
+        {/* Ambient Top Glow Border */}
+        <div className="absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent pointer-events-none" />
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-none">
-          {/* Avatar & Name */}
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-700 p-1 shadow-xl group">
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/jpeg,image/png,image/webp" 
-                onChange={handleFileSelect} 
-              />
-              <button 
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full h-full rounded-[1.4rem] overflow-hidden bg-[#1a1a1a] flex items-center justify-center relative cursor-pointer"
-                style={{ backgroundColor: !user?.avatar ? user?.avatarColor : undefined }}
-              >
-                {isUploading ? (
-                  <Loader2 className="h-8 w-8 text-white animate-spin" />
-                ) : user?.avatar ? (
-                  <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-4xl font-bold text-white">{(user?.displayName || user?.username || user?.email || '?')[0].toUpperCase()}</span>
-                )}
-                
-                {/* Overlay on hover */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center">
-                  <Camera className="h-6 w-6 text-white mb-1" />
-                  <span className="text-[9px] font-bold text-white uppercase tracking-wider">Change</span>
-                </div>
-              </button>
+        {/* ── Modal Header ── */}
+        <div className={`px-6 py-4 border-b flex items-center justify-between gap-4 shrink-0 transition-colors ${headerBg}`}>
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-purple-500/25 shrink-0">
+              <User size={20} />
             </div>
-            
-            {user?.avatar && (
-              <button 
-                onClick={handleRemovePhoto} 
-                disabled={isUploading}
-                className="flex items-center gap-1.5 text-xs font-bold text-rose-400 hover:text-rose-300 transition-colors"
-              >
-                <Trash2 size={14} /> Remove photo
-              </button>
-            )}
-
             <div>
-              <h3 className="text-2xl font-black text-[var(--text-primary)] tracking-tight">{user?.displayName || user?.username || 'User'}</h3>
-              <p className="text-sm text-[var(--text-secondary)] font-medium">{user?.email}</p>
+              <div className="flex items-center gap-2">
+                <h2 className={`text-xl font-black tracking-tight ${textTitle}`}>My Profile</h2>
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                  Identity
+                </span>
+              </div>
+              <p className={`text-xs ${textMuted}`}>Manage photo, account details & status</p>
             </div>
           </div>
 
-          {/* Bio Section */}
-          <div className="space-y-3">
-            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">About</label>
-            {isEditing ? (
-              <div className="space-y-2">
+          <button
+            onClick={onClose}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer ${closeBtnBg}`}
+            title="Close (Esc)"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* ── Modal Body ── */}
+        <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh] scrollbar-thin">
+          
+          {/* Avatar Showcase */}
+          {/* Avatar Showcase - Frozen with Google Account */}
+          <div className="flex flex-col items-center text-center space-y-3">
+            <div className="relative group">
+              <div 
+                className="w-24 h-24 rounded-3xl p-1 shadow-xl relative overflow-hidden flex items-center justify-center border-2 border-purple-500/30"
+                style={{ backgroundColor: !user?.avatar ? (user?.avatarColor || '#7c3aed') : undefined }}
+              >
+                {user?.avatar ? (
+                  <img 
+                    src={user.avatar} 
+                    alt="Profile" 
+                    referrerPolicy="no-referrer"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    className="w-full h-full object-cover rounded-2xl" 
+                  />
+                ) : (
+                  <span className="text-4xl font-extrabold text-white">
+                    {(user?.displayName || user?.username || user?.email || '?')[0].toUpperCase()}
+                  </span>
+                )}
+              </div>
+
+              {/* Status Badge */}
+              <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white dark:border-[#101015] shadow-sm flex items-center justify-center" title="Online">
+                <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+              </span>
+            </div>
+
+            {/* Frozen / Locked Google Avatar Badge */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-300 text-xs font-semibold shadow-sm">
+              <Lock size={12} className="text-purple-500 shrink-0" />
+              <span>Google Profile Photo (Locked)</span>
+            </div>
+          </div>
+
+          {/* User Details Card */}
+          <div className={`p-4 rounded-2xl border space-y-3.5 ${cardBg}`}>
+            {/* Display Name */}
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                <User size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Display Name</p>
+                <p className={`text-sm font-bold truncate ${textTitle}`}>{user?.displayName || 'User'}</p>
+              </div>
+            </div>
+
+            {/* Username Handle */}
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                <AtSign size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Blink Handle</p>
+                <p className="text-sm font-bold text-purple-600 dark:text-purple-400 truncate">@{user?.username || 'user'}</p>
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                Verified
+              </span>
+            </div>
+
+            {/* Email Address */}
+            {user?.email && (
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <Mail size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${textMuted}`}>Account Email</p>
+                  <p className={`text-sm font-medium truncate ${textTitle}`}>{user.email}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* About / Bio Status Section */}
+          <div className={`p-4 rounded-2xl border space-y-2.5 ${cardBg}`}>
+            <div className="flex items-center justify-between">
+              <label className={`text-xs font-bold uppercase tracking-wider ${textMuted}`}>About / Status</label>
+              {!isEditingBio && (
+                <button
+                  onClick={() => setIsEditingBio(true)}
+                  className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+
+            {isEditingBio ? (
+              <div className="space-y-2 pt-1 animate-in fade-in">
                 <textarea
                   autoFocus
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
-                  className="w-full bg-[var(--bg-secondary)] border border-purple-500/30 rounded-2xl p-4 text-sm text-[var(--text-primary)] outline-none focus:ring-2 focus:ring-purple-500/20 resize-none"
+                  placeholder="Tell people about yourself..."
+                  maxLength={160}
+                  className={`w-full text-sm rounded-xl p-3 border focus:border-purple-500 focus:outline-none resize-none transition-all ${
+                    isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-white/10 border-white/20 text-white'
+                  }`}
                   rows={3}
                 />
-                <button 
-                  onClick={handleSaveBio}
-                  className="w-full py-2 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-500 transition-colors"
-                >
-                  Save Changes
-                </button>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[11px] ${textMuted}`}>{bio.length}/160</span>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setBio(user?.status || 'Available');
+                        setIsEditingBio(false);
+                      }}
+                      className="rounded-xl text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={isSavingBio}
+                      onClick={handleSaveBio}
+                      className="rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white"
+                    >
+                      {isSavingBio ? <Loader2 size={13} className="animate-spin mr-1" /> : <Check size={13} className="mr-1" />}
+                      Save Status
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
-              <div 
-                onClick={() => setIsEditing(true)}
-                className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-4 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-all"
-              >
-                {bio}
-              </div>
+              <p className={`text-sm italic cursor-pointer ${textTitle}`} onClick={() => setIsEditingBio(true)}>
+                "{bio}"
+              </p>
             )}
           </div>
 
-          {/* Theme Toggle */}
-          <div className="space-y-3">
-            <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-1">Settings</label>
-            <div className="flex items-center justify-between bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-4">
-              <span className="text-sm font-bold text-[var(--text-primary)]">Dark Mode</span>
-              <button 
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className={`w-12 h-6 rounded-full transition-all relative ${theme === 'dark' ? 'bg-purple-600' : 'bg-zinc-700'}`}
-              >
-                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${theme === 'dark' ? 'left-7' : 'left-1'}`} />
-              </button>
+          {/* Security & Sign Out Section */}
+          <div className="pt-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck size={16} className="text-emerald-500" />
+              <span className={`text-xs ${textMuted}`}>Blink Session Authenticated</span>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSignOut}
+              className="rounded-xl text-xs font-bold border-rose-500/30 text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+            >
+              <LogOut size={13} className="mr-1.5" /> Sign Out
+            </Button>
           </div>
+
         </div>
 
-        {/* Sign Out */}
-        <div className="p-6 border-t border-[var(--border-color)]">
-          <button 
-            onClick={onSignOut}
-            className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-rose-600/20"
-          >
-            Sign Out
-          </button>
-        </div>
       </motion.div>
     </div>
   );
