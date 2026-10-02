@@ -18,9 +18,9 @@ export const sortMessagesByTime = <T extends { createdAt?: string; created_at?: 
 };
 
 export const useMessages = (chatId: string | null, initialMessages: Message[] = []) => {
-  // ─── [1-10] State & Refs ──────────────────
   const [messages, setMessages] = useState<Message[]>(() => sortMessagesByTime(initialMessages));
   const [loading, setLoading] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<'CONNECTING' | 'SUBSCRIBED' | 'CLOSED' | 'CHANNEL_ERROR'>('CONNECTING');
   const channelRef = useRef<any>(null);
 
   const mapMsg = useCallback((m: any): Message => ({
@@ -48,7 +48,6 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     if (!chatId) return;
     if (!isBackground) setLoading(true);
 
-    // Safety timeout: if loading takes more than 5s, stop spinner
     const timeoutId = !isBackground ? setTimeout(() => setLoading(false), 5000) : null;
 
     try {
@@ -59,11 +58,10 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('[useMessages] Fetch error:', error);
+        if (import.meta.env.DEV) console.error('[useMessages] Fetch error:', error);
       } else {
         const mapped = data?.map(mapMsg) || [];
         setMessages(prev => {
-          // If server returned messages, merge them preserving any pending optimistic messages
           if (mapped.length > 0) {
             const pendingOptimistic = prev.filter(m => m.status === 'sending');
             const serverIds = new Set(mapped.map(m => m.id));
@@ -72,7 +70,6 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
             localStorage.setItem(`messages_${chatId}`, JSON.stringify(merged));
             return merged;
           }
-          // If server returned 0 messages but we already have preloaded/optimistic messages, don't wipe them!
           if (prev.length > 0) {
             return sortMessagesByTime(prev);
           }
@@ -80,26 +77,24 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         });
       }
     } catch (err) {
-      console.error('[useMessages] unexpected error:', err);
+      if (import.meta.env.DEV) console.error('[useMessages] unexpected error:', err);
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
       if (!isBackground) setLoading(false);
     }
   }, [chatId, mapMsg]);
 
-  // ─── [11-50] Effect: Initial Fetch & Polling Fallback ────────
+  // Initial fetch and cache load
   useEffect(() => {
     if (!chatId) {
       setMessages([]);
       return;
     }
 
-    // 0. Use pre-loaded messages from conversation if provided
     if (initialMessages && initialMessages.length > 0) {
       setMessages(sortMessagesByTime(initialMessages));
     }
 
-    // 1. Load from cache first for instant display
     const cached = localStorage.getItem(`messages_${chatId}`);
     if (cached) {
       try {
@@ -108,32 +103,35 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
           setMessages(sortMessagesByTime(parsed));
         }
       } catch (e) {
-        console.error('[useMessages] Cache parse error:', e);
+        if (import.meta.env.DEV) console.error('[useMessages] Cache parse error:', e);
       }
     }
 
-    // 2. Fetch fresh messages immediately
     fetchMessages();
-
-    // 3. Fallback Polling every 2s in background (critical when Supabase Realtime channel is CLOSED)
-    const pollInterval = setInterval(() => {
-      fetchMessages(true);
-    }, 2000);
-
-    return () => clearInterval(pollInterval);
   }, [chatId, fetchMessages]);
 
-  // ─── [51-100] Effect: Realtime Sub ────────
+  // Dynamic Polling: 15s safety net when SUBSCRIBED, 2s fallback when CONNECTING/CLOSED/ERROR
   useEffect(() => {
     if (!chatId) return;
 
-    // Clear old channel
+    const intervalTime = realtimeStatus === 'SUBSCRIBED' ? 15000 : 2000;
+    const pollInterval = setInterval(() => {
+      fetchMessages(true);
+    }, intervalTime);
+
+    return () => clearInterval(pollInterval);
+  }, [chatId, realtimeStatus, fetchMessages]);
+
+  useEffect(() => {
+    if (!chatId) return;
+
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     }
 
-    // Set up subscription
+    setRealtimeStatus('CONNECTING');
+
     channelRef.current = supabase
       .channel(`messages_${chatId}`)
       .on('postgres_changes', {
@@ -142,17 +140,14 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         table: 'messages',
         filter: `chat_id=eq.${chatId}`
       }, (p) => {
-        console.log('[REALTIME] INSERT received:', p.new);
         if (!p.new) return;
         const newMessage = p.new;
         if (!newMessage.text && !newMessage.media_url) return;
         const mapped = mapMsg(newMessage);
         setMessages(prev => {
-          // Duplicate prevention: if confirmed/returned message is already in state, skip
           const alreadyExists = prev.some(m => m.id === mapped.id);
           if (alreadyExists) return prev;
 
-          // If there is an optimistic message still in 'sending' state matching this message, update it
           const pendingIndex = prev.findIndex(m => m.status === 'sending' && m.senderId === mapped.senderId && m.content === mapped.content);
           let next: Message[];
           if (pendingIndex !== -1) {
@@ -172,13 +167,13 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         table: 'messages',
         filter: `chat_id=eq.${chatId}`
       }, (p) => {
-        console.log('[REALTIME UPDATE]', p.new.id, p.new.status);
         const up = p.new;
         setMessages(prev => {
           const next = prev.map(m => m.id === up.id ? {
             ...m,
             status: up.status as MessageStatus,
-            seen: up.seen
+            seen: up.seen,
+            reactions: up.reactions ?? m.reactions
           } : m);
           const sorted = sortMessagesByTime(next);
           localStorage.setItem(`messages_${chatId}`, JSON.stringify(sorted));
@@ -186,9 +181,8 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
         });
       })
       .subscribe((status) => {
-        console.log(`[REALTIME] Status for ${chatId}:`, status);
+        setRealtimeStatus(status as any);
         if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          // Retry after 2 seconds
           setTimeout(() => {
             if (channelRef.current) {
               channelRef.current.subscribe();
@@ -205,7 +199,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     };
   }, [chatId, mapMsg]);
 
-  // ─── [101-160] Event Handlers ───────────────
+  // FIX: id ab client-generated hi DB me insert hota hai — optimistic <-> realtime race khatam
   const sendMessage = async (
     text: string,
     sId: string,
@@ -214,13 +208,14 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     mData: any = null,
     mId?: string,
     isAI: boolean = false,
-    replyTo?: { id: string; senderName?: string; text: string } | null
+    replyTo?: { id: string; senderName?: string; text: string } | null,
+    isRecipientOnline: boolean = false
   ) => {
     if (type === 'text' && (!text || !text.trim())) return;
     const clientGeneratedId = mId || crypto.randomUUID();
     const nowIso = new Date().toISOString();
+    const targetStatus: MessageStatus = isRecipientOnline ? 'delivered' : 'sent';
 
-    // 1. Instant optimistic message for sender UI render
     const optimisticMsg: Message = {
       id: clientGeneratedId,
       senderId: sId,
@@ -244,35 +239,31 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     });
 
     try {
-      // 2. Perform insert and get returned confirmed data
       const payload: any = {
+        id: clientGeneratedId, // <-- FIX: DB row ka id bhi yahi rahe
         chat_id: cId,
         sender_id: sId,
         text: text.trim(),
         type,
-        status: 'sent',
+        status: targetStatus,
         seen: false,
         created_at: nowIso
       };
 
-      if (replyTo?.id) {
-        payload.reply_to = replyTo.id;
-      }
-      if (replyTo) {
-        payload.reply_to_message = replyTo;
-      }
+      if (replyTo?.id) payload.reply_to = replyTo.id;
+      if (replyTo) payload.reply_to_message = replyTo;
 
       let result = await supabase.from('messages').insert(payload).select().single();
 
-      // Fallback if reply_to or reply_to_message column doesn't exist in DB schema
       if (result.error) {
-        console.warn('[useMessages] insert with reply error, trying base payload:', result.error.message);
+        if (import.meta.env.DEV) console.warn('[useMessages] insert with reply error, trying base payload:', result.error.message);
         const basePayload: any = {
+          id: clientGeneratedId,
           chat_id: cId,
           sender_id: sId,
           text: text.trim(),
           type,
-          status: 'sent',
+          status: targetStatus,
           seen: false,
           created_at: nowIso
         };
@@ -281,14 +272,12 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
 
       if (result.error) throw result.error;
 
-      // 3. Immediately update local state with confirmed returned data (no waiting for realtime)
       const confirmedMsg = mapMsg(result.data);
       setMessages(prev => {
         const next = prev.map(m => m.id === clientGeneratedId ? {
           ...optimisticMsg,
           ...confirmedMsg,
-          id: confirmedMsg.id,
-          status: 'sent' as MessageStatus
+          status: (confirmedMsg.status || targetStatus) as MessageStatus
         } : m);
         const sorted = sortMessagesByTime(next);
         localStorage.setItem(`messages_${cId}`, JSON.stringify(sorted));
@@ -297,55 +286,80 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
 
       return result.data;
     } catch (err) {
-      console.error('[useMessages] Send error:', err);
-      // Mark optimistic message as failed
+      if (import.meta.env.DEV) console.error('[useMessages] Send error:', err);
       setMessages(prev => prev.map(m => m.id === clientGeneratedId ? { ...m, status: 'error' as MessageStatus } : m));
     }
   };
 
   const markAsRead = async (cId: string, uId: string) => {
+    // 1. Instant optimistic update so local UI reflects seen immediately without waiting for DB
+    setMessages(prev => {
+      let changed = false;
+      const next = prev.map(m => {
+        if (m.senderId !== uId && m.status !== 'seen') {
+          changed = true;
+          return { ...m, status: 'seen' as MessageStatus, seen: true };
+        }
+        return m;
+      });
+      if (changed) {
+        localStorage.setItem(`messages_${cId}`, JSON.stringify(next));
+        return next;
+      }
+      return prev;
+    });
+
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('messages')
         .update({ status: 'seen', seen: true })
         .eq('chat_id', cId)
         .neq('sender_id', uId)
         .in('status', ['sent', 'delivered'])
         .select();
-
-      console.log('[markAsRead] updated:', data, 'error:', error);
       if (error) throw error;
     } catch (err) {
-      console.error('[useMessages] Read error:', err);
+      if (import.meta.env.DEV) console.error('[useMessages] Read error:', err);
     }
   };
 
   const markAsDelivered = async (cId: string, uId: string) => {
     try {
-      await supabase
+      const { data, error } = await supabase
         .from('messages')
         .update({ status: 'delivered' })
         .eq('chat_id', cId)
         .neq('sender_id', uId)
-        .eq('status', 'sent');
+        .eq('status', 'sent')
+        .select();
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setMessages(prev => prev.map(m => {
+          if (m.senderId !== uId && m.status === 'sent') {
+            return { ...m, status: 'delivered' as MessageStatus };
+          }
+          return m;
+        }));
+      }
     } catch (err) {
-      console.error('[useMessages] Delivered error:', err);
+      if (import.meta.env.DEV) console.error('[useMessages] Delivered error:', err);
     }
   };
 
+  // FIX: ab stale `messages` closure pe depend nahi karta
   const addReaction = async (mId: string, emoji: string, uId: string) => {
+    let updatedReactions: { emoji: string; userId: string }[] = [];
+
     setMessages(prev => {
       const next = prev.map(m => {
         if (m.id === mId) {
           const currentReactions = m.reactions || [];
           const existing = currentReactions.find(r => r.userId === uId);
-          let updated;
-          if (existing) {
-            updated = currentReactions.map(r => r.userId === uId ? { ...r, emoji } : r);
-          } else {
-            updated = [...currentReactions, { emoji, userId: uId }];
-          }
-          return { ...m, reactions: updated };
+          updatedReactions = existing
+            ? currentReactions.map(r => r.userId === uId ? { ...r, emoji } : r)
+            : [...currentReactions, { emoji, userId: uId }];
+          return { ...m, reactions: updatedReactions };
         }
         return m;
       });
@@ -354,16 +368,7 @@ export const useMessages = (chatId: string | null, initialMessages: Message[] = 
     });
 
     try {
-      const target = messages.find(m => m.id === mId);
-      const current = target?.reactions || [];
-      const updated = current.some(r => r.userId === uId)
-        ? current.map(r => r.userId === uId ? { ...r, emoji } : r)
-        : [...current, { emoji, userId: uId }];
-
-      await supabase
-        .from('messages')
-        .update({ reactions: updated })
-        .eq('id', mId);
+      await supabase.from('messages').update({ reactions: updatedReactions }).eq('id', mId);
     } catch (err) {
       console.error('[useMessages] Reaction error:', err);
     }

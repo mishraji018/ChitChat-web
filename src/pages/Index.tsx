@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Phone, Users } from 'lucide-react';
+import { Phone, Users, MessageSquare } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import BottomNav, { MobileTab } from '@/components/BottomNav';
@@ -7,8 +7,6 @@ import ChatListSidebar from '@/components/ChatListSidebar';
 import ChatPanel from '@/components/ChatPanel';
 import ProfilePanel from '@/components/ProfilePanel';
 import SettingsPanel from '@/components/SettingsPanel';
-import NewChatPanel from '@/components/NewChatPanel';
-import Header from '@/components/Header';
 import NavigationSidebar from '@/components/NavigationSidebar';
 import CameraModal from '@/components/CameraModal';
 import NewGroupModal from '@/components/NewGroupModal';
@@ -18,7 +16,6 @@ import { AIAssistant } from '@/components/AIAssistant';
 import type { ThemeType, User, Message, MessageStatus } from '@/types';
 import { supabase } from '@/config/supabase';
 import { subscribeOnce, unsubscribe } from '@/lib/realtimeManager';
-import { MessageSquare } from "lucide-react";
 import { toast } from '@/components/ui/use-toast';
 import { sortMessagesByTime } from '@/hooks/useMessages';
 
@@ -44,7 +41,8 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     return [];
   });
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-  
+  const [globalRealtimeStatus, setGlobalRealtimeStatus] = useState<'CONNECTING' | 'SUBSCRIBED' | 'CLOSED' | 'CHANNEL_ERROR'>('CONNECTING');
+
   const fetchConversations = useCallback(async () => {
     if (!currentUser?.id) return;
     try {
@@ -54,22 +52,23 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           *,
           participant1:users!chats_participant1_id_fkey(*),
           participant2:users!chats_participant2_id_fkey(*),
-          messages:messages(id, text, type, created_at, seen, status, sender_id)
+          messages:messages(
+            id, text, type, created_at, seen, status, sender_id,
+            media_url, media_type, media_size, media_name,
+            reply_to, reply_to_message
+          )
         `)
         .or(`participant1_id.eq.${currentUser.id},participant2_id.eq.${currentUser.id}`)
         .order('created_at', { ascending: false });
 
-      console.log('[useChats] fetched chats:', data, error);
-
       if (error) throw error;
-      
+
       if (data) {
         const rawMappedChats = data
           .map((conv: any) => {
             const otherParticipant = conv.participant1_id === currentUser.id ? conv.participant2 : conv.participant1;
             if (!otherParticipant) return null;
-            
-            // Get the last message — sort by created_at descending and pick first
+
             const sortedMsgs = (conv.messages || []).sort(
               (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             );
@@ -84,6 +83,10 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 content: m.text,
                 text: m.text,
                 type: m.type || 'text',
+                mediaUrl: m.media_url,
+                mediaType: m.media_type,
+                mediaSize: m.media_size,
+                mediaName: m.media_name,
                 timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 createdAt: m.created_at,
                 status: (m.status || (m.seen ? 'seen' : 'sent')) as MessageStatus,
@@ -99,7 +102,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 displayName: otherParticipant.display_name || otherParticipant.name || 'User',
                 avatar: otherParticipant.avatar_url || otherParticipant.avatar,
                 avatarColor: otherParticipant.avatar_color || '#ff4500',
-                isOnline: false, // Will be updated by presence
+                isOnline: false,
                 lastSeen: otherParticipant.last_seen
               },
               messages: allMappedMsgs,
@@ -121,7 +124,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           })
           .filter(Boolean);
 
-        // Deduplicate conversations by participant user ID to avoid duplicate chat rows
         const uniqueChatsMap = new Map<string, any>();
         for (const chat of rawMappedChats) {
           if (!chat) continue;
@@ -129,40 +131,44 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           if (!uniqueChatsMap.has(otherUserId)) {
             uniqueChatsMap.set(otherUserId, chat);
           } else {
-            // If already present, merge messages and take whichever has latest activity
             const existing = uniqueChatsMap.get(otherUserId);
             const mergedMsgs = [...existing.messages, ...chat.messages].sort(
               (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
             );
             const dedupedMsgs = Array.from(new Map(mergedMsgs.map(m => [m.id, m])).values());
             const latestMsg = dedupedMsgs.length > 0 ? dedupedMsgs[dedupedMsgs.length - 1] : existing.lastMessage;
-            
-            // Prefer the chat that has messages
+
             if (chat.messages.length > existing.messages.length) {
-              uniqueChatsMap.set(otherUserId, {
-                ...chat,
-                messages: dedupedMsgs,
-                lastMessage: latestMsg
-              });
+              uniqueChatsMap.set(otherUserId, { ...chat, messages: dedupedMsgs, lastMessage: latestMsg });
             } else {
-              uniqueChatsMap.set(otherUserId, {
-                ...existing,
-                messages: dedupedMsgs,
-                lastMessage: latestMsg
-              });
+              uniqueChatsMap.set(otherUserId, { ...existing, messages: dedupedMsgs, lastMessage: latestMsg });
             }
           }
         }
         const mappedChats = Array.from(uniqueChatsMap.values()).map((c: any) => ({
           ...c,
-          user: {
-            ...c.user,
-            isOnline: onlineUsers.includes(c.user.id)
-          }
+          user: { ...c.user, isOnline: onlineUsers.includes(c.user.id) }
         }));
 
         localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(mappedChats));
         setChats(mappedChats);
+
+        // Automatically mark incoming messages received in these conversations as delivered
+        const incomingSentChatIds = data
+          .filter((conv: any) =>
+            conv.messages?.some((m: any) => m.sender_id !== currentUser.id && m.status === 'sent')
+          )
+          .map((c: any) => c.id);
+
+        if (incomingSentChatIds.length > 0) {
+          supabase
+            .from('messages')
+            .update({ status: 'delivered' })
+            .in('chat_id', incomingSentChatIds)
+            .neq('sender_id', currentUser.id)
+            .eq('status', 'sent')
+            .then(() => {});
+        }
       }
     } catch (err) {
       console.error('Failed to fetch conversations from Supabase:', err);
@@ -170,28 +176,23 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   }, [currentUser?.id, onlineUsers]);
 
   useEffect(() => {
-    // 1. Instantly load from cache if available
     if (currentUser?.id) {
       const cachedChats = localStorage.getItem(`chats_${currentUser.id}`);
       if (cachedChats) {
         try {
           const parsed = JSON.parse(cachedChats);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setChats(parsed);
-          }
+          if (Array.isArray(parsed) && parsed.length > 0) setChats(parsed);
         } catch (e) {
           console.error('Cache load error:', e);
         }
       }
     }
-    // 2. Fetch fresh from DB
     fetchConversations();
   }, [currentUser?.id, fetchConversations]);
 
   useEffect(() => {
     if (!currentUser || !currentUser.id) return;
 
-    // Supabase Presence for online status
     const channel = supabase.channel('online-users', {
       config: { presence: { key: currentUser.id } }
     });
@@ -200,23 +201,17 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       const state = channel.presenceState();
       const onlineIds = new Set<string>();
       Object.values(state).forEach((presences: any) => {
-        presences.forEach((p: any) => {
-          if (p.user_id) onlineIds.add(p.user_id);
-        });
+        presences.forEach((p: any) => { if (p.user_id) onlineIds.add(p.user_id); });
       });
       setOnlineUsers(Array.from(onlineIds));
     };
 
     const trackPresence = async () => {
-      await channel.track({
-        user_id: currentUser.id,
-        online_at: new Date().toISOString(),
-      });
+      await channel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
     };
 
     const updateLastSeen = () => {
-      supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id)
-        .then(() => {});
+      supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', currentUser.id).then(() => {});
     };
 
     channel
@@ -224,25 +219,19 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       .on('presence', { event: 'join' }, ({ newPresences }) => {
         setOnlineUsers(prev => {
           const next = new Set(prev);
-          newPresences.forEach((p: any) => {
-            if (p.user_id) next.add(p.user_id);
-          });
+          newPresences.forEach((p: any) => { if (p.user_id) next.add(p.user_id); });
           return Array.from(next);
         });
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
         setOnlineUsers(prev => {
           const next = new Set(prev);
-          leftPresences.forEach((p: any) => {
-            if (p.user_id) next.delete(p.user_id);
-          });
+          leftPresences.forEach((p: any) => { if (p.user_id) next.delete(p.user_id); });
           return Array.from(next);
         });
       })
       .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await trackPresence();
-        }
+        if (status === 'SUBSCRIBED') await trackPresence();
       });
 
     const handleBeforeUnload = () => {
@@ -260,7 +249,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     };
   }, [currentUser?.id]);
 
-
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -276,7 +264,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const [activeTab, setActiveTab] = useState('messages');
   const [globalSearch, setGlobalSearch] = useState('');
 
-  // Handle back navigation for mobile
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
     window.history.pushState({ chatId }, '', `#chat`);
@@ -289,17 +276,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
-      if (!e.state?.chatId) {
-        setSelectedChatId(null);
-      } else {
-        setSelectedChatId(e.state.chatId);
-      }
+      setSelectedChatId(e.state?.chatId ?? null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Clear OAuth hash on initial load
   useEffect(() => {
     if (window.location.hash.includes('access_token')) {
       window.history.replaceState({}, '', '/');
@@ -317,39 +299,28 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark', 'theme-light', 'theme-dark', 'theme-deep-blue', 'theme-rose', 'theme-teal');
-    
-    // Set data-theme for the new variable system
     root.setAttribute('data-theme', currentTheme);
 
     if (currentTheme === 'light') {
       root.classList.add('light', 'theme-light');
     } else {
-      // dark, deep-blue, rose, teal are all dark-based themes
       root.classList.add('dark');
       if (currentTheme === 'deep-blue') root.classList.add('theme-deep-blue');
       else if (currentTheme === 'rose') root.classList.add('theme-rose');
       else if (currentTheme === 'teal') root.classList.add('theme-teal');
       else root.classList.add('theme-dark');
     }
-    
+
     localStorage.setItem('blinkchat_theme', currentTheme);
   }, [currentTheme]);
 
   const handleTabChange = (tab: string) => {
-    if (tab === 'profile') {
-      setShowProfile(true);
-    } else if (tab === 'settings') {
-      setShowSettings(true);
-    } else if (tab === 'switch') {
-      onSwitchAccount?.();
-    } else {
-      setActiveTab(tab);
-    }
+    if (tab === 'profile') setShowProfile(true);
+    else if (tab === 'settings') setShowSettings(true);
+    else if (tab === 'switch') onSwitchAccount?.();
+    else setActiveTab(tab);
   };
 
-  // ─── Global Realtime: messages + chats ─────────────────────────────────
-  // Uses subscribeOnce() to guarantee a single subscription even under
-  // React StrictMode double-invoke and Vite HMR re-runs.
   const currentUserIdRef = useRef(currentUser?.id);
   currentUserIdRef.current = currentUser?.id;
   const selectedChatIdRef = useRef(selectedChatId);
@@ -361,18 +332,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
   useEffect(() => {
     if (!currentUser?.id) return;
-
     const CHANNEL = 'global-messages';
 
     subscribeOnce(CHANNEL, (ch) =>
       ch
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages'
-        }, (payload) => {
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
           const newMessage = payload.new as any;
-          console.log('🔵 [Global] INSERT:', newMessage?.id, 'chat:', newMessage?.chat_id);
 
           setChatsRef.current((prev: any) => {
             const chatIndex = prev.findIndex((c: any) => c.id === newMessage.chat_id);
@@ -416,72 +381,96 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             }
           });
         })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'messages'
-        }, (payload) => {
+        // FIX: ab raw snake_case fields spread nahi karte — sirf status/reactions normalize karke update karte hain
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
           const updatedMsg = payload.new as any;
           setChatsRef.current((prev: any) => prev.map((c: any) => {
             if (c.id === updatedMsg.chat_id) {
               const updatedMessages = c.messages.map((m: any) =>
-                m.id === updatedMsg.id ? { ...m, ...updatedMsg, status: (updatedMsg.status || (updatedMsg.seen ? 'seen' : 'sent')) as MessageStatus } : m
+                m.id === updatedMsg.id
+                  ? {
+                      ...m,
+                      status: (updatedMsg.status || (updatedMsg.seen ? 'seen' : 'sent')) as MessageStatus,
+                      reactions: updatedMsg.reactions ?? m.reactions,
+                    }
+                  : m
               );
               return { ...c, messages: updatedMessages, lastMessage: updatedMessages[updatedMessages.length - 1] };
             }
             return c;
           }));
         })
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chats'
-        }, () => fetchConversationsRef.current())
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chats' }, () => fetchConversationsRef.current())
         .subscribe((status) => {
-          console.log('[global-messages] status:', status);
+          setGlobalRealtimeStatus(status as any);
         })
     );
 
-    return () => {
-      unsubscribe(CHANNEL);
-    };
-  }, []); // empty — subscribeOnce handles dedup; refs carry latest values
+    return () => { unsubscribe(CHANNEL); };
+  }, []);
 
-  // Background sync for conversation list & latest messages
   useEffect(() => {
     if (!currentUser?.id) return;
-    const interval = setInterval(() => {
-      fetchConversations();
-    }, 4000);
+    const intervalTime = globalRealtimeStatus === 'SUBSCRIBED' ? 15000 : 4000;
+    const interval = setInterval(() => { fetchConversations(); }, intervalTime);
     return () => clearInterval(interval);
-  }, [currentUser?.id, fetchConversations]);
+  }, [currentUser?.id, fetchConversations, globalRealtimeStatus]);
 
-  // Reset unread count when opening a chat
   useEffect(() => {
     if (selectedChatId) {
-      setChats((prev: any) => prev.map((c: any) => 
-        c.id === selectedChatId ? { ...c, unreadCount: 0 } : c
-      ));
+      setChats((prev: any) => prev.map((c: any) => c.id === selectedChatId ? { ...c, unreadCount: 0 } : c));
     }
   }, [selectedChatId]);
 
-  // Sync online status
   useEffect(() => {
-    setChats((prev: any) => prev.map((c: any) => ({
-      ...c,
-      user: { ...c.user, isOnline: onlineUsers.includes(c.user.id) }
-    })));
-  }, [onlineUsers]);
+    setChats((prev: any) =>
+      prev.map((c: any) => {
+        const isOnline = onlineUsers.includes(c.user.id);
+        if (isOnline) {
+          let updated = false;
+          const updatedMessages = c.messages.map((m: any) => {
+            if (m.status === 'sent') {
+              updated = true;
+              return { ...m, status: 'delivered' as MessageStatus };
+            }
+            return m;
+          });
+          const lastMsg = updatedMessages[updatedMessages.length - 1];
+          return {
+            ...c,
+            user: { ...c.user, isOnline },
+            messages: updated ? updatedMessages : c.messages,
+            lastMessage: updated && lastMsg ? { ...lastMsg, status: 'delivered' as MessageStatus } : c.lastMessage
+          };
+        }
+        return { ...c, user: { ...c.user, isOnline } };
+      })
+    );
+
+    if (currentUser?.id && onlineUsers.length > 0) {
+      const onlineContactChatIds = chats
+        .filter((c: any) => onlineUsers.includes(c.user?.id))
+        .map((c: any) => c.id);
+
+      if (onlineContactChatIds.length > 0) {
+        supabase
+          .from('messages')
+          .update({ status: 'delivered' })
+          .in('chat_id', onlineContactChatIds)
+          .eq('status', 'sent')
+          .then(({ error }) => {
+            if (error && import.meta.env.DEV) console.error('[Index] mark delivered error:', error);
+          });
+      }
+    }
+  }, [onlineUsers, currentUser?.id]);
 
   useEffect(() => {
     localStorage.setItem('blinkchat_conversations', JSON.stringify(chats));
   }, [chats]);
 
-  // Note: Message fetching is handled by the useMessages hook in ChatPanel.
-  // We only mark messages as read when selecting a chat.
   useEffect(() => {
     if (!selectedChatId) return;
-
     const markAsRead = async () => {
       try {
         await supabase
@@ -494,20 +483,17 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
         console.error('Failed to mark messages as read:', err);
       }
     };
-
     markAsRead();
   }, [selectedChatId]);
 
   const handleStartChat = async (user: User) => {
     try {
-      // 1. Check local state first
       const existingLocal = chats.find((c: any) => c.user.id === user.id);
       if (existingLocal) {
         handleSelectChat(existingLocal.id);
         return;
       }
 
-      // 2. Check database for existing chat between these two users
       const { data: existingChats, error: fetchError } = await supabase
         .from('chats')
         .select('*')
@@ -519,28 +505,17 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
       const existingChat = existingChats && existingChats.length > 0 ? existingChats[0] : null;
 
       if (existingChat) {
-        // Chat exists in DB but maybe not in local state yet
         const newChat = {
-          id: existingChat.id,
-          user: user,
-          messages: [],
-          unreadCount: 0,
-          isPinned: false,
-          isMuted: false,
-          isArchived: false,
-          lastMessage: null,
-          lastMessageAt: existingChat.created_at
+          id: existingChat.id, user, messages: [], unreadCount: 0,
+          isPinned: false, isMuted: false, isArchived: false,
+          lastMessage: null, lastMessageAt: existingChat.created_at
         };
         setChats((prev: any) => [newChat, ...prev]);
         handleSelectChat(existingChat.id);
       } else {
-        // 3. Create new conversation in Supabase
         const { data: newChatData, error: insertError } = await supabase
           .from('chats')
-          .insert({
-            participant1_id: currentUser.id,
-            participant2_id: user.id
-          })
+          .insert({ participant1_id: currentUser.id, participant2_id: user.id })
           .select()
           .single();
 
@@ -548,15 +523,9 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
         if (newChatData) {
           const newChat = {
-            id: newChatData.id,
-            user: user,
-            messages: [],
-            unreadCount: 0,
-            isPinned: false,
-            isMuted: false,
-            isArchived: false,
-            lastMessage: null,
-            lastMessageAt: newChatData.created_at
+            id: newChatData.id, user, messages: [], unreadCount: 0,
+            isPinned: false, isMuted: false, isArchived: false,
+            lastMessage: null, lastMessageAt: newChatData.created_at
           };
           setChats((prev: any) => [newChat, ...prev]);
           handleSelectChat(newChat.id);
@@ -570,11 +539,9 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
   const handleToggleMute = async (chatId: string) => {
     setChats((prev: any) => prev.map((c: any) => c.id === chatId ? { ...c, isMuted: !c.isMuted } : c));
   };
-
   const handleTogglePin = async (chatId: string) => {
     setChats((prev: any) => prev.map((c: any) => c.id === chatId ? { ...c, isPinned: !c.isPinned } : c));
   };
-
   const handleToggleArchive = async (chatId: string) => {
     setChats((prev: any) => prev.map((c: any) => c.id === chatId ? { ...c, isArchived: !c.isArchived } : c));
   };
@@ -591,24 +558,22 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     setShowDeleteConfirm(false);
   };
 
-  const handleBlockUser = async (chatId: string) => {
+  const handleBlockUser = async () => {
     toast({ title: 'User blocked (Locally)' });
     setShowBlockConfirm(false);
   };
 
-  const handleReportUser = async (chatId: string) => {
+  const handleReportUser = async () => {
     toast({ title: 'User reported (Locally)' });
     setShowReportConfirm(false);
   };
 
-  const handleReact = async (chatId: string, messageId: string, emoji: string) => {
-    // React logic would go here via Supabase (e.g. a 'reactions' table)
+  const handleReact = async () => {
     toast({ title: 'Reaction added locally' });
   };
 
   const archivedChats = chats.filter((c: any) => c.isArchived);
   const activeChats = chats.filter((c: any) => !c.isArchived);
-
   const displayChats = activeTab === 'archived' ? archivedChats : activeChats;
 
   const sortedChats = [...displayChats].sort((a: any, b: any) => {
@@ -653,12 +618,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                       if (c.id === chatId) {
                         const exists = c.messages.some((m: any) => m.id === msg.id);
                         const updatedMessages = exists ? c.messages : sortMessagesByTime([...c.messages, msg]);
-                        return {
-                          ...c,
-                          messages: updatedMessages,
-                          lastMessage: msg,
-                          lastMessageAt: new Date().toISOString()
-                        };
+                        return { ...c, messages: updatedMessages, lastMessage: msg, lastMessageAt: new Date().toISOString() };
                       }
                       return c;
                     }));
@@ -726,7 +686,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                           </div>
                           <h2 className="text-2xl font-bold text-zinc-100">{currentUser.displayName}</h2>
                           <p className="text-zinc-500">@{currentUser.username}</p>
-                          
                           <div className="w-full mt-10 space-y-3">
                             <button onClick={() => setShowProfile(true)} className="w-full p-4 rounded-2xl bg-[#1a1a1a] border border-white/5 flex items-center justify-between group">
                               <span className="font-bold text-zinc-200">Edit Profile</span>
@@ -750,7 +709,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             </div>
           ) : (
             <div className="flex-1 h-full flex p-3 md:p-5 gap-4 overflow-hidden bg-[var(--bg-primary)]">
-              {/* Left Floating Card - Chat List Sidebar */}
               <div className="w-[360px] lg:w-[400px] h-full flex flex-col rounded-[2.2rem] bg-[var(--chat-list-bg,#ffffff)] text-[var(--chat-list-text,#111111)] shadow-2xl overflow-hidden shrink-0 border border-black/5 dark:border-white/10 transition-all">
                 <ChatListSidebar
                   chats={sortedChats}
@@ -771,7 +729,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                 />
               </div>
 
-              {/* Right Main Chat Panel */}
               <div className="flex-1 h-full rounded-[2.2rem] bg-[var(--bg-primary)] border border-[var(--border-color)] relative overflow-hidden flex flex-col shadow-inner">
                 {selectedChatId ? (
                   <ChatPanel
@@ -786,12 +743,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                         if (c.id === chatId) {
                           const exists = c.messages.some((m: any) => m.id === msg.id);
                           const updatedMessages = exists ? c.messages : sortMessagesByTime([...c.messages, msg]);
-                          return {
-                            ...c,
-                            messages: updatedMessages,
-                            lastMessage: msg,
-                            lastMessageAt: new Date().toISOString()
-                          };
+                          return { ...c, messages: updatedMessages, lastMessage: msg, lastMessageAt: new Date().toISOString() };
                         }
                         return c;
                       }));
@@ -831,13 +783,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
 
       <AnimatePresence>
         {showProfile && (
-          <ProfilePanel 
-            isOpen={showProfile} 
-            onClose={() => setShowProfile(false)} 
-            user={currentUser}
-            onSignOut={onLogout}
-            currentTheme={currentTheme}
-          />
+          <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)} user={currentUser} onSignOut={onLogout} currentTheme={currentTheme} />
         )}
         {showSettings && (
           <SettingsPanel
@@ -852,19 +798,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
           />
         )}
         {showCamera && (
-          <CameraModal 
-            isOpen={showCamera} 
-            onClose={() => setShowCamera(false)} 
-            onSend={(data) => {
-              console.log("Send camera photo", data);
-              setShowCamera(false);
-            }}
-          />
+          <CameraModal isOpen={showCamera} onClose={() => setShowCamera(false)} onSend={() => setShowCamera(false)} />
         )}
         {showNewGroup && (
-          <NewGroupModal 
-            isOpen={showNewGroup} 
-            onClose={() => setShowNewGroup(false)} 
+          <NewGroupModal
+            isOpen={showNewGroup}
+            onClose={() => setShowNewGroup(false)}
             onCreate={(data) => {
               const newChat = {
                 id: `group_${Date.now()}`,
@@ -875,11 +814,7 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
                   avatarColor: data.iconColor,
                   isOnline: true,
                 },
-                messages: [],
-                unreadCount: 0,
-                isPinned: false,
-                isMuted: false,
-                isArchived: false,
+                messages: [], unreadCount: 0, isPinned: false, isMuted: false, isArchived: false,
               };
               setChats((prev: any) => [newChat, ...prev]);
               handleSelectChat(newChat.id);
@@ -901,30 +836,12 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
             currentTheme={currentTheme}
           />
         )}
-        {showAI && (
-          <AIAssistant 
-            isOpen={showAI} 
-            onClose={() => setShowAI(false)} 
-            chats={chats}
-          />
-        )}
+        {showAI && <AIAssistant isOpen={showAI} onClose={() => setShowAI(false)} chats={chats} />}
       </AnimatePresence>
 
-      <DeleteChatModal 
-        isOpen={showDeleteConfirm} 
-        onClose={() => setShowDeleteConfirm(false)} 
-        onConfirm={() => selectedChatId && handleDeleteConversation(selectedChatId)} 
-      />
-      <BlockUserModal 
-        isOpen={showBlockConfirm} 
-        onClose={() => setShowBlockConfirm(false)} 
-        onConfirm={() => selectedChatId && handleBlockUser(selectedChatId)}
-      />
-      <ReportUserModal 
-        isOpen={showReportConfirm} 
-        onClose={() => setShowReportConfirm(false)} 
-        onConfirm={() => selectedChatId && handleReportUser(selectedChatId)}
-      />
+      <DeleteChatModal isOpen={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} onConfirm={() => selectedChatId && handleDeleteConversation(selectedChatId)} />
+      <BlockUserModal isOpen={showBlockConfirm} onClose={() => setShowBlockConfirm(false)} onConfirm={handleBlockUser} />
+      <ReportUserModal isOpen={showReportConfirm} onClose={() => setShowReportConfirm(false)} onConfirm={handleReportUser} />
     </motion.div>
   );
 };

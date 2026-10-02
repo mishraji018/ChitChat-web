@@ -5,7 +5,7 @@
  * SUPABASE TABLES: messages, users (via hooks)
  */
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/config/supabase';
 import { ArrowLeft, Search, MoreVertical, ChevronDown, BellOff, User, UserPlus, Image as Wallpaper, Archive, Pin, Trash2, Ban, Flag, ChevronUp, X as CloseIcon } from 'lucide-react';
 import { Chat, Message, ThemeType, MessageStatus, User as UserType } from '@/types';
@@ -173,12 +173,53 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
     if (chat?.id) scroll(messages.length > 0 ? 'smooth' : 'auto');
   }, [chat?.id, messages]);
 
+  const markAsReadTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const isMarkingAsReadRef = useRef(false);
+
+  const debouncedMarkAsRead = useCallback(() => {
+    if (!chat?.id || !currentUser?.id) return;
+    if (markAsReadTimeoutRef.current) clearTimeout(markAsReadTimeoutRef.current);
+
+    markAsReadTimeoutRef.current = setTimeout(async () => {
+      if (isMarkingAsReadRef.current) return;
+      isMarkingAsReadRef.current = true;
+      try {
+        await markAsRead(chat.id, currentUser.id);
+        await markAsDelivered(chat.id, currentUser.id);
+      } finally {
+        isMarkingAsReadRef.current = false;
+      }
+    }, 250);
+  }, [chat?.id, currentUser?.id, markAsRead, markAsDelivered]);
+
+  // Mark as read when chat opens or new messages arrive
   useEffect(() => {
     if (chat?.id && currentUser?.id) {
-      markAsRead(chat.id, currentUser.id);
-      markAsDelivered(chat.id, currentUser.id);
+      debouncedMarkAsRead();
     }
-  }, [chat?.id, currentUser?.id, messages.length]);
+  }, [chat?.id, currentUser?.id, messages.length, debouncedMarkAsRead]);
+
+  // Mark as read when tab/window gains focus or visibility
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && chat?.id && currentUser?.id) {
+        debouncedMarkAsRead();
+      }
+    };
+    const handleFocus = () => {
+      if (chat?.id && currentUser?.id) {
+        debouncedMarkAsRead();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      if (markAsReadTimeoutRef.current) clearTimeout(markAsReadTimeoutRef.current);
+    };
+  }, [chat?.id, currentUser?.id, debouncedMarkAsRead]);
 
   useEffect(() => {
     if (justBroken) shadcnToast({ title: "💔 Streak ended!", variant: "destructive" });
@@ -225,7 +266,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
       console.log('Sending:', { content, chatId: chat.id, userId: currentUser.id, isAI, replyMessage });
       const currentReply = replyMessage;
       setReplyMessage(null);
-      const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia, undefined, isAI, currentReply);
+      const data = await sendMessage(content, currentUser.id, chat.id, type, iMedia, undefined, isAI, currentReply, isContactOnline);
       await updateStreak();
       if (onSendMessage) {
         onSendMessage(chat.id, { 
@@ -236,7 +277,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
           content, 
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
           createdAt: data?.created_at || new Date().toISOString(), 
-          status: 'sent',
+          status: (data?.status || (isContactOnline ? 'delivered' : 'sent')) as MessageStatus,
           is_ai: isAI,
           replyTo: currentReply?.id,
           replyToMessage: currentReply || undefined
@@ -267,7 +308,9 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
       const isVoice = f.name.startsWith('voice_') || f.type.startsWith('audio/');
       const messageType = isVoice ? 'audio' : result.type;
 
+      const fileMsgId = uuidv4();
       const { data: insertedMsg, error: insertErr } = await supabase.from('messages').insert({
+        id: fileMsgId,
         chat_id: chat.id,
         sender_id: currentUser.id,
         text: isVoice ? '🎤 Voice note' : result.name,
@@ -277,14 +320,14 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
         media_name: result.name,
         media_size: result.size,
         upload_status: 'done',
-        status: 'sent',
+        status: isContactOnline ? 'delivered' : 'sent',
         seen: false,
         created_at: new Date().toISOString()
       }).select().single();
 
-      if (!insertErr && insertedMsg) {
+      if (!insertErr && (insertedMsg || fileMsgId)) {
         const fileMsg: Message = {
-          id: insertedMsg.id,
+          id: insertedMsg?.id || fileMsgId,
           senderId: currentUser.id,
           receiverId: chat.user.id,
           type: messageType as any,
@@ -295,7 +338,7 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
           mediaType: messageType,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: insertedMsg.created_at || new Date().toISOString(),
-          status: 'sent'
+          status: (insertedMsg.status || (isContactOnline ? 'delivered' : 'sent')) as MessageStatus
         };
         setMessages(prev => {
           if (prev.some(m => m.id === fileMsg.id)) return prev;
@@ -371,7 +414,17 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
     setSearchResults(m); setCurrentMatch(0);
   }, [searchQuery, messages]);
 
-  const onScroll = () => { if (containerRef.current) setShowScrollBtn(containerRef.current.scrollHeight - containerRef.current.scrollTop - containerRef.current.clientHeight > 100); };
+  const onScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollHeight, scrollTop, clientHeight } = containerRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    setShowScrollBtn(distanceFromBottom > 100);
+
+    // If user scrolled near bottom (latest messages), ensure markAsRead is called
+    if (distanceFromBottom < 80) {
+      debouncedMarkAsRead();
+    }
+  };
 
   // ─── [251-561] Render ─────────────────────
   return (
@@ -485,7 +538,13 @@ const ChatPanel = ({ chat, onBack, t, currentUser, onSendMessage, onOpenInfo, on
                       resolvedReply = {
                         id: parent.id,
                         senderName: parent.senderId === currentUser.id ? 'You' : (nickname || chat.user.displayName),
-                        text: parent.content || parent.text || 'Message'
+                        text: parent.content || parent.text || (parent.mediaUrl ? 'Attachment' : 'Message')
+                      };
+                    } else {
+                      resolvedReply = {
+                        id: m.replyTo,
+                        senderName: 'Original message',
+                        text: 'Original message deleted'
                       };
                     }
                   }

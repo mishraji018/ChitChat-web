@@ -86,7 +86,20 @@ const ChatListItem = ({ chat, isActive, onClick, currentUser }: Props) => {
           
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-              {isMe && last && <span className={`text-[11px] font-bold ${last.status === 'seen' ? 'text-teal-600' : 'text-[var(--chat-list-subtext,#666666)] opacity-60'}`}>{last.status === 'seen' ? '✓✓' : '✓'}</span>}
+              {isMe && last && (
+                <span
+                  className={`text-[11px] font-bold ${
+                    last.status === 'seen'
+                      ? 'text-teal-600 dark:text-cyan-400'
+                      : last.status === 'delivered'
+                      ? 'text-[var(--chat-list-subtext,#666666)] opacity-90'
+                      : 'text-[var(--chat-list-subtext,#666666)] opacity-50'
+                  }`}
+                  title={last.status}
+                >
+                  {last.status === 'seen' || last.status === 'delivered' ? '✓✓' : '✓'}
+                </span>
+              )}
               {renderIcon()}
               <span className="text-[12px] text-[var(--chat-list-subtext,#666666)] truncate font-medium">{getPText()}</span>
             </div>

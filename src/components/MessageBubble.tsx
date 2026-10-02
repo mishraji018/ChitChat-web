@@ -4,7 +4,8 @@
  * HOOKS USED: none (Functional Component)
  */
 
-import { FileText, MapPin, Mic, Play, Download, Reply, Forward, Copy, Star, Edit, Trash2, Smile, Loader2, AlertCircle } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { FileText, MapPin, Mic, Play, Pause, Download, Reply, Forward, Copy, Star, Edit, Trash2, Smile, Loader2, AlertCircle } from 'lucide-react';
 import { Message, User } from '@/types';
 import { motion } from 'framer-motion';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator, ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger } from "@/components/ui/context-menu";
@@ -30,6 +31,88 @@ interface Props {
   onScrollToMessage?: (messageId: string) => void;
   isLatestSentMessage?: boolean;
 }
+
+const AudioBubble = ({ src, isSent }: { src: string; isSent: boolean }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const togglePlay = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(e => console.warn('Audio play error:', e));
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return;
+    setCurrentTime(audioRef.current.currentTime);
+    setProgress((audioRef.current.currentTime / (audioRef.current.duration || 1)) * 100);
+  };
+
+  const handleLoadedMetadata = () => {
+    if (!audioRef.current) return;
+    setDuration(audioRef.current.duration);
+  };
+
+  const formatTime = (secs: number) => {
+    if (isNaN(secs) || secs === 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  return (
+    <div className="flex items-center gap-2.5 py-1 min-w-[220px] max-w-[280px]">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => { setIsPlaying(false); setProgress(0); }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+        className="hidden"
+      />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-95 shadow-md ${
+          isSent ? 'bg-white text-primary' : 'bg-primary text-primary-foreground'
+        }`}
+      >
+        {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
+      </button>
+
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div
+          className="h-1.5 w-full bg-black/20 dark:bg-white/20 rounded-full overflow-hidden cursor-pointer relative"
+          onClick={(e) => {
+            if (!audioRef.current || !duration) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+            audioRef.current.currentTime = pos * duration;
+          }}
+        >
+          <div
+            className={`h-full rounded-full transition-all ${isSent ? 'bg-white' : 'bg-primary'}`}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center mt-1 text-[10px] opacity-75 font-mono">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
+        </div>
+      </div>
+      <Mic size={15} className={`shrink-0 opacity-70 ${isSent ? 'text-white' : 'text-primary'}`} />
+    </div>
+  );
+};
 
 const MessageBubble = ({ 
   message, 
@@ -82,16 +165,20 @@ const MessageBubble = ({
 
   // ─── Reply Quote Preview Strip (WhatsApp/Telegram style) ──────
   const ReplyPreview = () => {
-    if (!message.replyToMessage) return null;
-    const { id: replyId, senderName, text } = message.replyToMessage;
+    if (!message.replyToMessage && !message.replyTo) return null;
+    const reply = message.replyToMessage;
+    const replyId = reply?.id || message.replyTo;
+    const senderName = reply?.senderName || 'Original message';
+    const text = reply?.text || (message.replyTo && !reply ? 'Original message deleted' : 'Attachment');
+    const isDeleted = text === 'Original message deleted';
 
     return (
       <button
         type="button"
-        onClick={() => replyId && onScrollToMessage?.(replyId)}
+        onClick={() => replyId && !isDeleted && onScrollToMessage?.(replyId)}
         className={`
-          w-full text-left mb-2 flex overflow-hidden rounded-xl cursor-pointer
-          transition-opacity hover:opacity-80 active:opacity-70
+          w-full text-left mb-2 flex overflow-hidden rounded-xl
+          ${!isDeleted ? 'cursor-pointer transition-opacity hover:opacity-80 active:opacity-70' : 'cursor-default opacity-60'}
           ${isSent
             ? 'bg-black/20 border border-white/10'
             : 'bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10'
@@ -99,18 +186,18 @@ const MessageBubble = ({
         `}
       >
         {/* Left accent bar */}
-        <div className={`w-[3px] shrink-0 rounded-l-xl ${isSent ? 'bg-white/70' : 'bg-primary'}`} />
+        <div className={`w-[3px] shrink-0 rounded-l-xl ${isDeleted ? 'bg-red-400' : isSent ? 'bg-white/70' : 'bg-primary'}`} />
         {/* Content */}
         <div className="flex-1 min-w-0 px-2.5 py-1.5">
           <span className={`font-semibold text-[11px] block leading-tight mb-0.5 ${
-            isSent ? 'text-white/90' : 'text-primary dark:text-primary-foreground'
+            isDeleted ? 'text-red-400 italic' : isSent ? 'text-white/90' : 'text-primary dark:text-primary-foreground'
           }`}>
-            {senderName || 'Reply'}
+            {senderName}
           </span>
           <span className={`text-[11px] leading-tight truncate block ${
-            isSent ? 'text-white/70' : 'text-[var(--text-secondary)]'
+            isDeleted ? 'italic text-red-300 dark:text-red-400' : isSent ? 'text-white/70' : 'text-[var(--text-secondary)]'
           }`}>
-            {text || 'Attachment'}
+            {text}
           </span>
         </div>
       </button>
@@ -136,7 +223,7 @@ const MessageBubble = ({
     switch (type) {
       case 'image': return wrap(<img src={mUrl} alt="Shared" className={`w-full object-cover cursor-pointer transition-all ${up || q || err ? 'blur-sm scale-110' : 'hover:scale-105'}`} onClick={() => !up && !q && window.open(mUrl, '_blank')} />);
       case 'video': return wrap(<video src={mUrl} controls={!up && !q} className={`w-full ${up || q || err ? 'blur-sm' : ''}`} />);
-      case 'audio': return <div className="min-w-[200px] relative">{ (up || q || err) && <Status /> }<audio src={mUrl} controls={!up && !q} className={`w-full h-8 ${up || q || err ? 'blur-sm' : ''}`} /></div>;
+      case 'audio': return <div className="min-w-[220px] relative">{ (up || q || err) && <Status /> }<AudioBubble src={mUrl} isSent={isSent} /></div>;
       case 'location': return <div className="flex items-center gap-3 min-w-[200px] py-1"><div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center"><MapPin size={20} className="text-primary" /></div><div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{dat?.name || 'Location'}</p><p className="text-xs opacity-70 truncate">{dat?.address || mContent}</p></div></div>;
       case 'sticker': return <span className="text-6xl block py-2">{mContent}</span>;
       case 'file':

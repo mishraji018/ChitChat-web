@@ -54,7 +54,7 @@ export const useFileUpload = () => {
   const getFileCategory = (file: File) => {
     if (file.type.startsWith('image/')) return 'image';
     if (file.type.startsWith('video/')) return 'video';
-    if (file.type.startsWith('audio/')) return 'audio';
+    if (file.type.startsWith('audio/') || file.name.startsWith('voice_')) return 'audio';
     return 'file';
   };
 
@@ -64,12 +64,14 @@ export const useFileUpload = () => {
     senderId: string,
     onProgress?: (percent: number) => void
   ) => {
-    // Compress before uploading
+    // Compress before uploading (images only)
     const fileToUpload = await compressImage(file);
     
     const fileId = crypto.randomUUID();
-    const ext = fileToUpload.name.split('.').pop();
-    const path = `${chatId}/${fileId}.${ext}`;
+    const ext = fileToUpload.name.split('.').pop() || (file.type.includes('audio') ? 'webm' : 'dat');
+    const isAudio = file.type.startsWith('audio/') || file.name.startsWith('voice_') || ext === 'webm' || ext === 'mp3' || ext === 'ogg';
+    const folder = isAudio ? `voice-notes/${chatId}` : `${chatId}`;
+    const path = `${folder}/${fileId}.${ext}`;
 
     setUploads(prev => [...prev, { 
       fileId, progress: 0, status: 'uploading' 
@@ -81,7 +83,8 @@ export const useFileUpload = () => {
         .from('chat-media')
         .upload(path, fileToUpload, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: fileToUpload.type || (isAudio ? 'audio/webm' : undefined)
         });
 
       if (error) throw error;

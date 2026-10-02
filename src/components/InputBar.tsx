@@ -68,6 +68,17 @@ const InputBar = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!replyToMessage) return;
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancelReply?.();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [replyToMessage, onCancelReply]);
+
   const onSendMsg = () => {
     if (sFile) { onSendFile?.(sFile); setSFile(null); setFPrev(null); return; }
     if (!text.trim()) return;
@@ -232,6 +243,9 @@ const InputBar = ({
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   onSendMsg();
+                } else if (e.key === 'Escape' && replyToMessage) {
+                  e.preventDefault();
+                  onCancelReply?.();
                 }
               }}
               placeholder={disabled ? "Blocked" : "Write your message...."}
