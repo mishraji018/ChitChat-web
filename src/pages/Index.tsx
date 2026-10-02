@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Phone, Users } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -17,6 +17,7 @@ import { DeleteChatModal, BlockUserModal, ReportUserModal } from '@/components/C
 import { AIAssistant } from '@/components/AIAssistant';
 import type { ThemeType, User, Message, MessageStatus } from '@/types';
 import { supabase } from '@/config/supabase';
+import { subscribeOnce, unsubscribe } from '@/lib/realtimeManager';
 import { MessageSquare } from "lucide-react";
 import { toast } from '@/components/ui/use-toast';
 
@@ -258,90 +259,6 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     };
   }, [currentUser?.id]);
 
-  // ─── Global Chat-List Realtime Subscription ──────────────────────────────
-  // Listens to ALL new messages (no chat_id filter) so chat list always reflects
-  // latest message regardless of which chat is currently open.
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const channel = supabase
-      .channel(`chat-list-updates-${currentUser.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-      }, (payload) => {
-        const newMsg = payload.new as any;
-        console.log('🔵 [Global] New message event received:', newMsg?.id, 'chat:', newMsg?.chat_id);
-        if (!newMsg?.chat_id) return;
-
-        setChats(prev => {
-          const idx = prev.findIndex((c: any) => c.id === newMsg.chat_id);
-          if (idx === -1) {
-            // Unknown chat — re-fetch full list to pick it up
-            fetchConversations();
-            return prev;
-          }
-          const updatedChat = {
-            ...prev[idx],
-            lastMessage: {
-              id: newMsg.id,
-              senderId: newMsg.sender_id,
-              content: newMsg.text,
-              text: newMsg.text,
-              type: newMsg.type || 'text',
-              timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              status: (newMsg.status || 'sent') as any,
-            },
-            lastMessageAt: newMsg.created_at,
-            // Increment unread if not the current user's own message
-            unreadCount: newMsg.sender_id !== currentUser.id
-              ? (prev[idx].unreadCount || 0) + 1
-              : prev[idx].unreadCount,
-            // Also append to messages array (for ChatPanel's initial messages)
-            messages: [
-              ...prev[idx].messages,
-              {
-                id: newMsg.id,
-                senderId: newMsg.sender_id,
-                receiverId: newMsg.receiver_id,
-                content: newMsg.text,
-                text: newMsg.text,
-                type: newMsg.type || 'text',
-                timestamp: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                createdAt: newMsg.created_at,
-                status: (newMsg.status || 'sent') as any,
-                replyTo: newMsg.reply_to,
-                replyToMessage: newMsg.reply_to_message,
-              }
-            ]
-          };
-          // Re-sort: newest chat to top
-          const next = [...prev];
-          next.splice(idx, 1);
-          next.unshift(updatedChat);
-          localStorage.setItem(`chats_${currentUser.id}`, JSON.stringify(next));
-          return next;
-        });
-      })
-      .subscribe((status) => {
-        console.log('[Global chat-list sub] status:', status);
-        if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          // Retry after 3s
-          setTimeout(() => channel.subscribe(), 3000);
-        }
-      });
-
-    // Polling fallback every 8s in case realtime drops
-    const pollInterval = setInterval(() => {
-      fetchConversations();
-    }, 8000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(pollInterval);
-    };
-  }, [currentUser?.id, fetchConversations]);
 
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -424,98 +341,105 @@ const Index = ({ currentUser, onLogout, onSwitchAccount, t, language, onLanguage
     }
   };
 
-  // Replace useSocket with Supabase Realtime
+  // ─── Global Realtime: messages + chats ─────────────────────────────────
+  // Uses subscribeOnce() to guarantee a single subscription even under
+  // React StrictMode double-invoke and Vite HMR re-runs.
+  const currentUserIdRef = useRef(currentUser?.id);
+  currentUserIdRef.current = currentUser?.id;
+  const selectedChatIdRef = useRef(selectedChatId);
+  selectedChatIdRef.current = selectedChatId;
+  const fetchConversationsRef = useRef(fetchConversations);
+  fetchConversationsRef.current = fetchConversations;
+  const setChatsRef = useRef(setChats);
+  setChatsRef.current = setChats;
+
   useEffect(() => {
-    if (!currentUser || !currentUser.id) return;
+    if (!currentUser?.id) return;
 
-    // Listen for new messages across ALL chats
-    const channel = supabase.channel('global-messages')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages' 
-      }, (payload) => {
-        const newMessage = payload.new;
-        
-        setChats((prev: any) => {
-          const chatIndex = prev.findIndex((c: any) => c.id === newMessage.chat_id);
-          if (chatIndex > -1) {
-            const updatedChats = [...prev];
-            const chat = { ...updatedChats[chatIndex] };
-            
-            const mappedMsg: Message = {
-              id: newMessage.id,
-              senderId: newMessage.sender_id,
-              receiverId: newMessage.receiver_id || currentUser.id,
-              content: newMessage.text,
-              text: newMessage.text,
-              type: newMessage.type || 'text',
-              mediaUrl: newMessage.media_url,
-              mediaType: newMessage.media_type,
-              mediaSize: newMessage.media_size,
-              mediaName: newMessage.media_name,
-              uploadStatus: newMessage.upload_status || 'done',
-              timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              createdAt: newMessage.created_at,
-              status: (newMessage.status || (newMessage.seen ? 'seen' : 'sent')) as MessageStatus,
-              replyTo: newMessage.reply_to,
-              replyToMessage: newMessage.reply_to_message
-            };
+    const CHANNEL = 'global-messages';
 
-            if (!chat.messages.some((m: any) => m.id === mappedMsg.id)) {
-              chat.messages = [...chat.messages, mappedMsg];
-              chat.lastMessage = mappedMsg;
-              chat.lastMessageAt = newMessage.created_at;
-              // Only increment unread count if NOT currently in this chat
-              if (selectedChatId !== chat.id) {
-                chat.unreadCount = (chat.unreadCount || 0) + 1;
+    subscribeOnce(CHANNEL, (ch) =>
+      ch
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        }, (payload) => {
+          const newMessage = payload.new as any;
+          console.log('🔵 [Global] INSERT:', newMessage?.id, 'chat:', newMessage?.chat_id);
+
+          setChatsRef.current((prev: any) => {
+            const chatIndex = prev.findIndex((c: any) => c.id === newMessage.chat_id);
+            if (chatIndex > -1) {
+              const updatedChats = [...prev];
+              const chat = { ...updatedChats[chatIndex] };
+
+              const mappedMsg: Message = {
+                id: newMessage.id,
+                senderId: newMessage.sender_id,
+                receiverId: newMessage.receiver_id || currentUserIdRef.current,
+                content: newMessage.text,
+                text: newMessage.text,
+                type: newMessage.type || 'text',
+                mediaUrl: newMessage.media_url,
+                mediaType: newMessage.media_type,
+                mediaSize: newMessage.media_size,
+                mediaName: newMessage.media_name,
+                uploadStatus: newMessage.upload_status || 'done',
+                timestamp: new Date(newMessage.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                createdAt: newMessage.created_at,
+                status: (newMessage.status || (newMessage.seen ? 'seen' : 'sent')) as MessageStatus,
+                replyTo: newMessage.reply_to,
+                replyToMessage: newMessage.reply_to_message,
+              };
+
+              if (!chat.messages.some((m: any) => m.id === mappedMsg.id)) {
+                chat.messages = [...chat.messages, mappedMsg];
+                chat.lastMessage = mappedMsg;
+                chat.lastMessageAt = newMessage.created_at;
+                if (selectedChatIdRef.current !== chat.id) {
+                  chat.unreadCount = (chat.unreadCount || 0) + 1;
+                }
               }
+
+              updatedChats.splice(chatIndex, 1);
+              return [chat, ...updatedChats];
+            } else {
+              fetchConversationsRef.current();
+              return prev;
             }
-            
-            updatedChats.splice(chatIndex, 1);
-            return [chat, ...updatedChats];
-          } else {
-            // New conversation created by another user! Automatically re-fetch conversation list
-            fetchConversations();
-            return prev;
-          }
-        });
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'messages'
-      }, (payload) => {
-        const updatedMsg = payload.new;
-        setChats((prev: any) => prev.map((c: any) => {
-          if (c.id === updatedMsg.chat_id) {
-            const updatedMessages = c.messages.map((m: any) => 
-              m.id === updatedMsg.id ? { ...m, ...updatedMsg, status: (updatedMsg.status || (updatedMsg.seen ? 'seen' : 'sent')) as MessageStatus } : m
-            );
-            const lastMsg = updatedMessages[updatedMessages.length - 1];
-            return { 
-              ...c, 
-              messages: updatedMessages, 
-              lastMessage: lastMsg
-            };
-          }
-          return c;
-        }));
-      })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'chats'
-      }, () => {
-        // If a new chat is created involving this user, refresh conversations list
-        fetchConversations();
-      })
-      .subscribe();
+          });
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages'
+        }, (payload) => {
+          const updatedMsg = payload.new as any;
+          setChatsRef.current((prev: any) => prev.map((c: any) => {
+            if (c.id === updatedMsg.chat_id) {
+              const updatedMessages = c.messages.map((m: any) =>
+                m.id === updatedMsg.id ? { ...m, ...updatedMsg, status: (updatedMsg.status || (updatedMsg.seen ? 'seen' : 'sent')) as MessageStatus } : m
+              );
+              return { ...c, messages: updatedMessages, lastMessage: updatedMessages[updatedMessages.length - 1] };
+            }
+            return c;
+          }));
+        })
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chats'
+        }, () => fetchConversationsRef.current())
+        .subscribe((status) => {
+          console.log('[global-messages] status:', status);
+        })
+    );
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribe(CHANNEL);
     };
-  }, [currentUser?.id, selectedChatId, fetchConversations]); // Added selectedChatId to correctly gate unread increments
+  }, []); // empty — subscribeOnce handles dedup; refs carry latest values
 
   // Background sync for conversation list & latest messages
   useEffect(() => {
